@@ -1,0 +1,80 @@
+[
+  {
+    "domain": ".majestic-rp.ru",
+    "expiry": 1790183620,
+    "httpOnly": false,
+    "name": "_gat_gtag_UA_134148656_2",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "1"
+  },
+  {
+    "domain": ".majestic-rp.ru",
+    "expiry": 1790269970,
+    "httpOnly": false,
+    "name": "_gid",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "GA1.2.764143944.1790183561"
+  },
+  {
+    "domain": "forum.majestic-rp.ru",
+    "expiry": 1824743554,
+    "httpOnly": false,
+    "name": "R3ACTLB",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "900120431ff156af65b9a29cc95b50cd"
+  },
+  {
+    "domain": "forum.majestic-rp.ru",
+    "httpOnly": false,
+    "name": "xf_csrf",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": true,
+    "value": "taQVc11AN4biRdGi"
+  },
+  {
+    "domain": "forum.majestic-rp.ru",
+    "expiry": 1821719568,
+    "httpOnly": true,
+    "name": "xf_user",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": true,
+    "value": "647772%2CE26qq5oftyxLpEzMuXM0D_apqyNVu9gB4eprDIZq"
+  },
+  {
+    "domain": "forum.majestic-rp.ru",
+    "httpOnly": true,
+    "name": "xf_session",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": true,
+    "value": "I-mNod9e_p5Dm80qZ5jriLlg8gNdGWUr"
+  },
+  {
+    "domain": ".majestic-rp.ru",
+    "expiry": 1824743570,
+    "httpOnly": false,
+    "name": "_ga_319PFF93QY",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "GS2.1.s1790183560$o1$g1$t1790183570$j50$l0$h0"
+  },
+  {
+    "domain": ".majestic-rp.ru",
+    "expiry": 1824743570,
+    "httpOnly": false,
+    "name": "_ga",
+    "path": "/",
+    "sameSite": "Lax",
+    "secure": false,
+    "value": "GA1.1.47790018.1790183561"
+  }
+]

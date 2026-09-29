@@ -1,0 +1,25 @@
+{
+  "abbreviations": {},
+  "telegraph_replacements": {},
+  "auto_check_section_keywords": [
+    "ОБРАЩЕНИЕ О ДАЧЕ РАЗЪЯСНЕНИЙ"
+  ],
+  "auto_check_thread_keywords": [
+    {
+      "keyword": "ОБРАЩЕНИЕ О ДАЧЕ РАЗЪЯСНЕНИЙ",
+      "date": ""
+    }
+  ],
+  "topic_filters": [
+    {
+      "keyword": "ОБРАЩЕНИЕ О ДАЧЕ РАЗЪЯСНЕНИЙ",
+      "parse_images": true,
+      "parse_text": false
+    }
+  ],
+  "selected_server_urls": [
+    "/#majestic-rp-memphis.1462"
+  ],
+  "ocr_min_chars": 150,
+  "prompt_path": "C:/Users/79528/PycharmProjects/PythonProject1/ServerParser/forum.majestic-rp.ru/promt 1.5.txt"
+}
