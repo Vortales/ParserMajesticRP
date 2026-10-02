@@ -25,6 +25,9 @@ from urllib.parse import urljoin, urlparse
 from concurrent.futures import ThreadPoolExecutor
 from importlib import import_module
 
+PARSER_NAME = "ultiparser"
+PARSER_VERSION = "1.22"
+
 def _pip(pkg: str) -> bool:
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "-q", pkg])
@@ -53,7 +56,7 @@ def _ensure(module: str, pkg: str, required=True) -> bool:
 
 
 print("=" * 60)
-print("  🚀 ФОРУМ-МЕНЕДЖЕР")
+print(f"  🚀 ФОРУМ-МЕНЕДЖЕР v{PARSER_VERSION}")
 print("=" * 60)
 print("\n🔧 Проверка зависимостей...")
 
@@ -77,7 +80,11 @@ BS_PARSER = "lxml" if HAS_LXML else "html.parser"
 print(f"✅ Готово (парсер: {BS_PARSER})\n")
 
 
-SERVERS_ROOT = Path("ultiparser1.14").absolute()
+# v1.16: папка парсера = папка данных.
+# Скрипт лежит в ultiparser1.16/ultiparser1.16.py, все рабочие файлы
+# (structure.json, config.json, checks.json, Результаты, _cache, images, logs)
+# создаются рядом со скриптом, внутри ultiparser1.16/.
+SERVERS_ROOT = Path(__file__).resolve().parent
 STRUCTURE_FILE = "structure.json"
 CONFIG_FILE = "config.json"
 COOKIES_FILE = "cookies.json"
@@ -91,8 +98,15 @@ IMAGES_SUBDIR = "images"
 
 OCR_IMAGE_MAX_BYTES = 20 * 1024 * 1024
 OCR_MAX_IMAGES_PER_POST = 50
-IMAGE_DOWNLOAD_DEADLINE = 25
+IMAGE_DOWNLOAD_DEADLINE = 12
 IMAGE_LOCK_WAIT = 3
+IMAGE_FALLBACK_TIMEOUT = 6
+OCR_MIN_BYTES = 1500
+OCR_MIN_DIM = 30
+HISTORY_FILE = "history.json"
+HISTORY_MAX_EVENTS = 100
+HISTORY_MAX_DIFF_LINES = 200
+HISTORY_MAX_LINE_LEN = 500
 MAX_DEPTH = 8
 
 PAGE_DELAY_MIN = 3.5
@@ -101,6 +115,40 @@ DDOS_WAIT = 120
 MAX_WORKERS = 1
 DEFAULT_FIRST_POST_ONLY = True
 DEBUG_LINKS = True
+
+# ── v1.16: гибридный транспорт (requests+cookies → браузер-фолбэк) ──
+# Быстрый путь идёт ПЕРВЫМ: обычные HTTP-запросы с сохранёнными cookies,
+# keep-alive сессиями и браузерными заголовками. Браузер поднимается только
+# при блокировках — лениво, по требованию. Сайт чувствителен к темпу:
+# глобальный рейт-лимитер держит паузу между ЛЮБЫМИ запросами независимо
+# от числа потоков, при сериях блокировок включается режим «только браузер».
+FAST_PATH_ENABLED_DEFAULT = True
+FAST_DELAY_MIN = 1.2          # пауза перед быстрым запросом (+ джиттер лимитера)
+FAST_DELAY_MAX = 2.8
+FAST_TIMEOUT = 25             # таймаут одного быстрого запроса, сек
+FAST_MAX_ATTEMPTS = 2         # попыток быстрым путём перед уходом в браузер
+FAST_BLOCK_THRESHOLD = 3      # блокировок подряд → временный «только браузер»
+FAST_BROWSER_ONLY_BASE = 300.0    # стартовое окно «только браузер», сек
+FAST_BROWSER_ONLY_MAX = 1800.0    # потолок адаптивного окна, сек
+FAST_MIN_INTERVAL = 1.2       # базовый минимальный интервал между запросами, сек
+FAST_BACKOFF_MAX_MULT = 4.0   # потолок адаптивного замедления (x к интервалу)
+BREAK_STREAK_TRIGGER = 2      # v1.21: блок-сигналов подряд → общая пауза всех потоков
+BREAK_LEVELS = (60.0, 120.0, 300.0, 600.0)  # v1.21: эскалация общих пауз, сек
+BREAK_RESET_SUCCESSES = 15    # v1.21: чистых хитов подряд → сброс эскалации
+BREAK_WAIT_CHUNK = 2.0        # v1.21: квант ожидания (проверка кнопки «Стоп»)
+SAFE_WORKERS_FAST = 2         # v1.21: мягкий предел «Потоков» (4 потока палились)
+
+# Маркеры «тема загрузилась нормально» (для проверки быстрых ответов)
+THREAD_POST_MARKERS = (
+    'article class="message', "message--post", "js-post", "bbwrapper", "message-body",
+)
+# Маркеры «страница ошибки/нет прав» — такой ответ принимаем как есть, без ретрая
+THREAD_ERROR_MARKERS = (
+    "недостаточно прав", "no permission", "you do not have permission",
+    "у вас нет прав", "oops! we ran into", "oops, we ran into",
+    "запрошенная страница не найдена", "страница не найдена",
+    "thread not found", "тема не найдена", "an error occurred",
+)
 
 DOC_FONT = "Times New Roman"
 DOC_SIZE = 4
@@ -208,18 +256,90 @@ def html_ok(html: str) -> bool:
     return not any(m in low for m in BLOCK_MARKERS)
 
 
+LOGGED_IN_MARKERS = (
+    'data-visitor-menu', 'href="/logout', "href='/logout",
+    'account-menu', 'p-navgroup--member', 'class="p-navgroup p-account',
+    'p-navgroup--user', 'data-logged-in="true"', 'js-logIn"',
+    'accountmenu', 'p-navgroup-link--user',
+)
+
+
+def _login_markers_found(html: str) -> list:
+    """Какие маркеры входа есть в HTML (v1.19, для диагностики)."""
+    if not html:
+        return []
+    low = html.lower()
+    return [m for m in LOGGED_IN_MARKERS if m in low]
+
+
+STRONG_LOGIN_MARKERS = (
+    'data-visitor-menu', 'href="/logout', "href='/logout",
+    'p-navgroup--member', 'class="p-navgroup p-account',
+)
+
+
+def _strong_login_markers_found(html: str) -> list:
+    """Сильные маркеры входа — почти невозможны у гостя (v1.20)."""
+    if not html:
+        return []
+    low = html.lower()
+    return [m for m in STRONG_LOGIN_MARKERS if m in low]
+
+
+def _page_has_expected_content(url: str, html: str) -> bool:
+    """Есть ли на странице ожидаемый контент (v1.20, чистая функция)."""
+    low = (html or "")[:200000].lower()
+    u = (url or "").lower()
+    if "/threads/" in u:
+        return any(m in low for m in THREAD_POST_MARKERS)
+    if "/forums/" in u or "/categories/" in u:
+        return ("structitem" in low) or any(m in low for m in THREAD_POST_MARKERS)
+    return True
+
+
+def analyze_login_refusal(html: str, url: str = "") -> dict:
+    """Разбор страницы с формой входа для диагностики (v1.20, чистая функция)."""
+    low = (html or "")[:200000].lower()
+    has_action = ('action="/login/login"' in low or 'action="login/login"' in low)
+    has_inputs = ('name="login"' in low and 'name="password"' in low)
+    markers = _login_markers_found(html)
+    strong = [m for m in markers if m in STRONG_LOGIN_MARKERS]
+    title = ""
+    try:
+        m = re.search(r"<title[^>]*>(.*?)</title>", (html or "")[:200000], re.I | re.S)
+        if m:
+            title = re.sub(r"\s+", " ", m.group(1)).strip()[:120]
+    except Exception:
+        title = ""
+    content_ok = _page_has_expected_content(url, html)
+    if not markers:
+        mstate = "нет"
+    elif not strong:
+        mstate = "только слабые"
+    elif not content_ok:
+        mstate = "есть, но нет контента"
+    else:
+        mstate = "есть"
+    if has_action:
+        form_bit = "форма входа: action"
+    elif has_inputs:
+        form_bit = "форма входа: inputs"
+    else:
+        form_bit = "форма входа: ?"
+    hint = f"{form_bit}; маркеры входа: {mstate}"
+    if title:
+        hint += f"; title: «{title}»"
+    return {"form_action": has_action, "form_inputs": has_inputs, "markers": markers,
+            "strong": strong, "title": title, "content_ok": content_ok,
+            "mstate": mstate, "hint": hint}
+
+
 def is_logged_in_html(html: str) -> bool:
     if not html:
         return False
     low = html.lower()
     # Расширенный список — разные темы XenForo называют блоки по-разному
-    markers_yes = (
-        'data-visitor-menu', 'href="/logout', "href='/logout",
-        'account-menu', 'p-navgroup--member', 'class="p-navgroup p-account',
-        'p-navgroup--user', 'data-logged-in="true"', 'js-logIn"',
-        'accountmenu', 'p-navgroup-link--user',
-    )
-    if any(m in low for m in markers_yes):
+    if _login_markers_found(html):
         if 'name="login"' in low and 'name="password"' in low and 'action="/login/login"' in low:
             return False
         return True
@@ -503,9 +623,11 @@ class ProcessEmitter:
 
     def step_progress(self, step_id, current, total):
         if total > 0:
-            pct = int(current / total * 100)
+            # v1.17: кламп — проценты и полоса никогда не вылезают за 100%.
+            ratio = min(1.0, max(0.0, current / total))
+            pct = int(ratio * 100)
             bar_len = 10
-            filled = int(bar_len * current / total)
+            filled = int(bar_len * ratio)
             bar = "▓" * filled + "░" * (bar_len - filled)
             self.q.put({"type": "step_metric", "id": step_id, "key": "progress", "value": f"[{bar}] {pct}%"})
         else:
@@ -837,26 +959,711 @@ class Browser:
 
 BROWSER_FALLBACK_THRESHOLD = 3   # после стольких блокировок подряд — сразу браузер, без повторных попыток requests
 
+class _RateLimiter:
+    """Глобальный ограничитель темпа запросов (v1.16).
+
+    Гарантирует минимальный интервал между ЛЮБЫМИ двумя запросами быстрым путём,
+    независимо от числа потоков. При блокировках временно увеличивает интервал
+    (backoff), при успехах — плавно возвращается к базовому.
+    """
+
+    def __init__(self, base_interval: float):
+        self._base = max(0.2, float(base_interval))
+        self._mult = 1.0
+        self.pace_mult = 1.0  # v1.21: «Тихий режим» ставит 3.0
+        self._next_allowed = 0.0
+        self._lock = threading.Lock()
+
+    def wait(self):
+        with self._lock:
+            now = time.monotonic()
+            delay = self._next_allowed - now
+            sleep_for = delay if delay > 0 else 0.0
+            # Резервируем слот СРАЗУ (под локом), чтобы параллельные потоки
+            # выстраивались в очередь, а не шли пачкой после одного ожидания.
+            interval = self._base * self._mult * self.pace_mult + random.uniform(0.0, 0.6)
+            self._next_allowed = max(now, self._next_allowed) + interval
+        if sleep_for > 0:
+            time.sleep(sleep_for)
+
+    def report(self, ok: bool):
+        with self._lock:
+            if ok:
+                self._mult = max(1.0, self._mult * 0.9)
+            else:
+                self._mult = min(FAST_BACKOFF_MAX_MULT, self._mult * 1.5 + 0.5)
+
+
+def _is_login_url(url: str) -> bool:
+    try:
+        path = urlparse(url or "").path.lower()
+    except Exception:
+        return False
+    return "/login" in path
+
+
+def _looks_like_login_page(html: str) -> bool:
+    if not html:
+        return False
+    low = html[:200000].lower()
+    has_form = ('action="/login/login"' in low or 'action="login/login"' in low
+                or ('name="login"' in low and 'name="password"' in low))
+    if not has_form:
+        return False
+    return not is_logged_in_html(html)
+
+
+def _suspicious_thread_html(url: str, html: str) -> bool:
+    """Тема без постов и без признаков ошибки — возможно, битый/урезанный ответ."""
+    if "/threads/" not in (url or "").lower():
+        return False
+    if not html or not html_ok(html):
+        return False
+    low = html[:200000].lower()
+    if any(m in low for m in THREAD_POST_MARKERS):
+        return False
+    if any(m in low for m in THREAD_ERROR_MARKERS):
+        return False
+    return True
+
+
 class HttpClient:
+    """Гибридный транспорт v1.16: быстрый путь requests+cookies, браузер — фолбэк.
+
+    Порядок попытки для каждого URL форума:
+      1) быстрый путь — requests-сессия с сохранёнными cookies (keep-alive,
+         браузерные заголовки, глобальный рейт-лимитер);
+      2) при блокировке/подозрительном ответе — существующий путь через браузер
+         (логика 1.15 без изменений);
+      3) после серии блокировок — временный режим «только браузер».
+    Публичный API get()/set_cookies()/get_cookies()/browser_fallback сохранён.
+    """
+
     def __init__(self):
         self._lock = threading.Lock()
         self._cookies = []
+        self._cookie_rev = 0
         self.browser_fallback = None
+        self.browser_ensurer = None      # callable() -> bool: ленивый старт браузера
+        self.cookie_harvester = None     # callable() -> list|None: свежие cookies из браузера
+        self.cookies_persister = None    # v1.19: callable(list) — сохранить свежие cookies в файл
         self._fallback_lock = threading.Lock()
         self.no_browser_errors = 0
+        # v1.21: общий рубильник — при блок-сигналах ВСЕ потоки и ОБА канала ждут.
+        self._break_lock = threading.Lock()
+        self._break_until = 0.0
+        self._break_level = 0
+        self._break_streak = 0
+        self._break_ok_run = 0
+        self.abort_event = None      # threading.Event «Стоп» от приложения
+        self.stealth_mult = 1.0      # «Тихий режим» ставит 3.0
+        self.fast_enabled = FAST_PATH_ENABLED_DEFAULT
+        self._tls = threading.local()
+        self._rate = _RateLimiter(FAST_MIN_INTERVAL)
         self._block_count = 0
         self._block_lock = threading.Lock()
         self._cooldown_until = 0.0
+        self._fast_block_count = 0
+        self._fast_lock = threading.Lock()
+        self._fast_browser_only_until = 0.0
+        self._fast_only_cycles = 0
+        self._refusals = {}
+        self._last_refusal = None
+        self._forensics_dumped = 0
+        self._ua_override = ""
+        self._ua_detected = False
+        self._last_ensure_attempt = 0.0
+        self._auth_warn_at = 0.0
+        self._stats_lock = threading.Lock()
+        self.fast_hits = 0
+        self.fast_trusted = 0    # v1.20: принято по маркерам входа (форма проигнорирована)
+        self.fast_blocks = 0
+        self.browser_hits = 0
 
+    # ── cookies ──────────────────────────────────────────────
     def set_cookies(self, cookies):
         with self._lock:
             self._cookies = list(cookies or [])
+            self._cookie_rev += 1
+            self._fast_only_cycles = 0
 
     def get_cookies(self):
         with self._lock:
             return list(self._cookies)
 
+    def has_cookies(self) -> bool:
+        with self._lock:
+            return bool(self._cookies)
+
+    def merge_cookies(self, cookies) -> bool:
+        """Вливает свежие cookies (из браузера) в общий набор. True, если что-то изменилось."""
+        if not cookies:
+            return False
+        changed = False
+        with self._lock:
+            cur = {c.get("name"): c for c in self._cookies if (c or {}).get("name")}
+            for c in cookies:
+                name = (c or {}).get("name")
+                if not name:
+                    continue
+                old = cur.get(name)
+                if not old or old.get("value") != c.get("value"):
+                    changed = True
+                cur[name] = dict(c)
+            if changed:
+                self._cookies = list(cur.values())
+                self._cookie_rev += 1
+                self._fast_only_cycles = 0
+                to_persist = list(cur.values())
+            else:
+                to_persist = None
+        if to_persist and self.cookies_persister:
+            try:
+                self.cookies_persister(to_persist)
+            except Exception:
+                pass
+        return changed
+
+    # ── UA ───────────────────────────────────────────────────
+    def set_ua(self, ua: str):
+        if ua:
+            with self._lock:
+                self._ua_override = ua
+
+    def ensure_real_ua(self):
+        """Однажды определяет версию Chrome и фиксирует UA для сессий (best-effort)."""
+        with self._lock:
+            if self._ua_detected:
+                return
+            self._ua_detected = True
+        try:
+            binary = find_chrome()
+            ver = chrome_ver(binary) if binary else None
+            if ver:
+                self.set_ua(build_real_ua(ver))
+        except Exception:
+            pass
+
+    # ── v1.21: общий рубильник антиблока ──────────────────────
+    def _note_block_signal(self, weight: int = 1) -> float:
+        """Блок-сигнал с любого канала. Серия → общая пауза. Возвращает паузу."""
+        open_for = 0.0
+        with self._break_lock:
+            self._break_streak += weight
+            self._break_ok_run = 0
+            if self._break_streak >= BREAK_STREAK_TRIGGER:
+                self._break_streak = 0
+                lvl = min(self._break_level, len(BREAK_LEVELS) - 1)
+                open_for = BREAK_LEVELS[lvl]
+                self._break_level = min(self._break_level + 1, len(BREAK_LEVELS) - 1)
+                self._break_until = time.monotonic() + open_for
+        if open_for > 0:
+            get_logger().warning(
+                f"breaker: форум ограничил доступ — общая пауза {open_for:.0f}с "
+                f"(все потоки и оба канала ждут, ретраи остановлены)")
+        return open_for
+
+    def _note_clean_hit(self):
+        """Чистый хит: гасит серию сигналов, серией — сбрасывает эскалацию."""
+        with self._break_lock:
+            self._break_streak = 0
+            self._break_ok_run += 1
+            if self._break_ok_run >= BREAK_RESET_SUCCESSES:
+                self._break_ok_run = 0
+                self._break_level = 0
+
+    def _sleep_abortable(self, seconds: float) -> bool:
+        """Сон квантами с проверкой abort (v1.21). False — прервано «Стоп»."""
+        left = max(0.0, seconds)
+        while left > 0:
+            time.sleep(min(BREAK_WAIT_CHUNK, left))
+            left -= BREAK_WAIT_CHUNK
+            try:
+                if self.abort_event is not None and self.abort_event.is_set():
+                    return False
+            except Exception:
+                pass
+        return True
+
+    def _wait_breaker(self, emitter=None, parent_id=None) -> bool:
+        """Ждёт конца общей паузы (v1.21). False — прервано через abort."""
+        with self._break_lock:
+            left = self._break_until - time.monotonic()
+        if left <= 0:
+            return True
+        if emitter and parent_id:
+            try:
+                s_br = emitter.step_added(parent_id, f"⏸ Форум отдыхает {left:.0f}с", "⏸")
+                emitter.step_state(s_br, "paused")
+            except Exception:
+                pass
+        # Снимок паузы ждём один раз; если другой поток продлил — дождём
+        # остаток при следующем запросе (все запросы идут через эту точку).
+        return self._sleep_abortable(left)
+
+    # ── статистика ───────────────────────────────────────────
+    def get_stats(self) -> dict:
+        with self._stats_lock:
+            with self._fast_lock:
+                left = max(0.0, self._fast_browser_only_until - time.monotonic())
+            with self._break_lock:
+                bleft = max(0.0, self._break_until - time.monotonic())
+            return {
+                "fast": self.fast_hits,
+                "fast_trusted": self.fast_trusted,
+                "fast_blocks": self.fast_blocks,
+                "browser": self.browser_hits,
+                "enabled": self.fast_enabled,
+                "browser_only_left": left,
+                "breaker_left": bleft,
+                "refusals": dict(self._refusals),
+                "last_refusal": dict(self._last_refusal) if self._last_refusal else None,
+            }
+
+    def _bump(self, name: str):
+        with self._stats_lock:
+            if name == "fast":
+                self.fast_hits += 1
+            elif name == "fast_trusted":
+                self.fast_trusted += 1
+            elif name == "fast_block":
+                self.fast_blocks += 1
+            elif name == "browser":
+                self.browser_hits += 1
+
+    def _cookie_diag(self) -> str:
+        """Короткая диагностика cookie-jar для логов (v1.19)."""
+        try:
+            with self._lock:
+                cookies = list(self._cookies)
+        except Exception:
+            cookies = []
+        has_user = False
+        for c in cookies or []:
+            try:
+                if (c.get("name") or "") == "xf_user" and (c.get("value") or "") not in ("", "0", "deleted"):
+                    has_user = True
+                    break
+            except Exception:
+                continue
+        return f"cookies: {len(cookies)}, xf_user: {'есть' if has_user else 'НЕТ'}"
+
+    # ── v1.17: диагностика отказов быстрого пути ─────────────────
+    def _record_refusal(self, cause: str, url: str, status: int,
+                        final_url: str, html: str):
+        """Причина отказа fast + образец HTML для разбора (best-effort)."""
+        try:
+            with self._stats_lock:
+                self._refusals[cause] = self._refusals.get(cause, 0) + 1
+                try:
+                    with self._lock:
+                        _ck = list(self._cookies)
+                except Exception:
+                    _ck = []
+                _has_user = any(((c or {}).get("name") == "xf_user"
+                                 and (c or {}).get("value") not in ("", "0", "deleted", None))
+                                for c in _ck)
+                self._last_refusal = {
+                    "ts": time.strftime("%H:%M:%S"),
+                    "cause": cause,
+                    "url": url or "",
+                    "status": int(status or 0),
+                    "final": final_url or "",
+                    "kb": len(html or "") // 1024,
+                    "cookies": len(_ck),
+                    "xf_user": bool(_has_user),
+                }
+            if html and self._forensics_dumped < 3:
+                self._forensics_dumped += 1
+                d = SERVERS_ROOT / "logs" / "fast_refused"
+                d.mkdir(parents=True, exist_ok=True)
+                stamp = time.strftime("%Y%m%d_%H%M%S")
+                head = (html or "")[:8192] if cause != "login_form" else (html or "")[:524288]
+                diag = ""
+                if cause == "login_form":
+                    try:
+                        _a = analyze_login_refusal(html, url)
+                        diag = (f" markers={len(_a['markers'])}/{len(_a['strong'])}"
+                                f" content={_a['content_ok']} title={_a['title']!r}")
+                    except Exception:
+                        diag = ""
+                (d / f"{stamp}_{cause}_{self._forensics_dumped}.html").write_text(
+                    f"<!-- url={url} status={status} final={final_url}{diag} -->\n{head}",
+                    encoding="utf-8", errors="replace",
+                )
+        except Exception:
+            pass
+
+    def _try_harvest_merge(self) -> bool:
+        """Пытается подлить свежие cookies из уже запущенного браузера."""
+        h = self.cookie_harvester
+        if not h:
+            return False
+        try:
+            fresh = h()
+        except Exception:
+            return False
+        try:
+            return bool(self.merge_cookies(fresh or []))
+        except Exception:
+            return False
+
+    def _fresh_jar(self):
+        """Канонический jar из текущих cookies.
+
+        v1.17: requests.Session сохраняет cookies из ответов, и один ответ
+        с протухшей сессией навсегда «отравлял» jar потока (все дальнейшие
+        быстрые запросы шли гостем → «требуется вход»). Поэтому перед каждым
+        запросом jar пересобирается из эталона self._cookies.
+        """
+        jar = requests.cookies.RequestsCookieJar()
+        with self._lock:
+            cookies = list(self._cookies)
+        for c in cookies:
+            try:
+                name = (c or {}).get("name")
+                if not name:
+                    continue
+                jar.set(
+                    name, (c or {}).get("value", ""),
+                    domain=((c or {}).get("domain") or FORUM_HOST),
+                    path=(c or {}).get("path") or "/",
+                )
+            except Exception:
+                continue
+        return jar
+
+    # ── сессии (по одной на поток, keep-alive) ───────────────
+    def _session(self):
+        sess = getattr(self._tls, "sess", None)
+        rev = getattr(self._tls, "rev", -1)
+        with self._lock:
+            cur_rev = self._cookie_rev
+            ua = self._ua_override or UA
+        if sess is None or rev != cur_rev:
+            sess = requests.Session()
+            sess.headers.update({
+                "User-Agent": ua,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                          "image/avif,image/webp,*/*;q=0.8",
+                "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Referer": FORUM_BASE_URL,
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "same-origin",
+                "Sec-Fetch-User": "?1",
+            })
+            sess.cookies = self._fresh_jar()
+            self._tls.sess = sess
+            self._tls.rev = cur_rev
+        return sess
+
+    # ── главная точка входа (сигнатура как в 1.15) ───────────
     def get(self, url: str, retries: int = 5, emitter=None, parent_id=None):
+        try:
+            host = (urlparse(url).netloc or "").lower()
+        except Exception:
+            host = ""
+        is_forum = bool(host) and host.endswith(FORUM_HOST.lower())
+
+        # v1.21: одна точка входа — во время общей паузы ждут ОБА канала.
+        if is_forum and not self._wait_breaker(emitter=emitter, parent_id=parent_id):
+            return None
+
+        if self.fast_enabled and is_forum and self.has_cookies():
+            with self._fast_lock:
+                browser_only = time.monotonic() < self._fast_browser_only_until
+            if not browser_only:
+                html = self._get_fast(url, emitter=emitter, parent_id=parent_id)
+                if html is not None:
+                    return html
+                # Быстрый путь не справился — идём в браузер (ниже).
+
+        return self._get_via_browser(url, retries=retries, emitter=emitter, parent_id=parent_id)
+
+    # ── быстрый путь ─────────────────────────────────────────
+    def _get_fast(self, url: str, emitter=None, parent_id=None):
+        em = emitter
+        s_fast = None
+        if em and parent_id:
+            s_fast = em.step_added(parent_id, "⚡ Быстрый запрос (cookies)", "⚡")
+            em.step_state(s_fast, "running")
+
+        def _finish(state, detail=""):
+            if em and s_fast:
+                em.step_state(s_fast, state, detail)
+
+        last_soft = ""
+        max_attempts = FAST_MAX_ATTEMPTS
+        recovered = False
+        for attempt in range(FAST_MAX_ATTEMPTS + 1):
+            if attempt >= max_attempts:
+                break
+            self._rate.wait()
+            time.sleep(random.uniform(FAST_DELAY_MIN, FAST_DELAY_MAX) * self.stealth_mult)
+            t0 = time.monotonic()
+            try:
+                sess = self._session()
+                sess.cookies = self._fresh_jar()
+                r = sess.get(url, timeout=FAST_TIMEOUT, allow_redirects=True)
+            except Exception as e:
+                last_soft = type(e).__name__
+                get_logger().debug(f"fast: {last_soft} ({attempt + 1}/{max_attempts}): {url}")
+                self._record_refusal("error", url, 0, url, "")
+                self._rate.report(False)
+                self._note_block_signal(weight=1)
+                time.sleep(2.0 + random.uniform(0.0, 2.0))
+                continue
+
+            elapsed = time.monotonic() - t0
+            status = getattr(r, "status_code", 0) or 0
+            final_url = getattr(r, "url", url) or url
+
+            if status != 200:
+                self._record_refusal(f"http_{status}", url, status, final_url, "")
+                self._note_fast_block(f"HTTP {status}")
+                if status in (403, 429):
+                    self._note_block_signal(weight=2 if status == 429 else 1)
+                _finish("error", f"HTTP {status} → браузер")
+                return None
+
+            try:
+                ctype = ((getattr(r, "headers", {}) or {}).get("Content-Type") or "").lower()
+                enc = (getattr(r, "encoding", "") or "").lower().replace("_", "-")
+                if (not enc or enc in ("iso-8859-1", "latin-1")) and "charset=" not in ctype:
+                    r.encoding = "utf-8"
+                html = r.text
+            except Exception:
+                html = ""
+
+            if _is_login_url(final_url) or _looks_like_login_page(html):
+                if _is_login_url(final_url):
+                    cause = "redirect_login"
+                    detail = "редирект на вход → браузер"
+                    analysis = None
+                else:
+                    cause = "login_form"
+                    analysis = analyze_login_refusal(html, url)
+                    # v1.20: страница с формой входа, НО с сильными маркерами входа
+                    # и ожидаемым контентом — форум отдал СВОЮ страницу, а форма лишь
+                    # встроена в тему оформления. Доверяем маркерам, принимаем.
+                    if analysis["strong"] and analysis["content_ok"]:
+                        self._rate.report(True)
+                        with self._fast_lock:
+                            self._fast_block_count = 0
+                            self._fast_only_cycles = 0
+                        self._bump("fast")
+                        self._bump("fast_trusted")
+                        self._note_clean_hit()
+                        _finish("done", f"{len(html) // 1024} КБ (маркеры входа есть, форма проигнорирована)")
+                        get_logger().info(
+                            f"fast: доверяю маркерам входа ({analysis['strong'][0]}), "
+                            f"форма входа проигнорирована: {url}")
+                        return html
+                    detail = (f"форма входа в HTML ({len(html) // 1024} КБ; "
+                              f"{self._cookie_diag()}; маркеры входа: {analysis['mstate']}) → браузер")
+                self._record_refusal(cause, url, status, final_url, html)
+                if not recovered and self._try_harvest_merge():
+                    recovered = True
+                    max_attempts += 1
+                    _finish("warn", "cookies обновлены, повтор быстрым путём")
+                    get_logger().info("fast: cookies обновлены из браузера — повторяю быстрым путём")
+                    continue
+                self._note_fast_block("требуется вход")
+                self._warn_auth_lost(analysis["hint"] if analysis else "")
+                _finish("error", detail)
+                return None
+
+            if not html_ok(html):
+                self._record_refusal("antibot", url, status, final_url, html)
+                self._note_fast_block("антибот-маркер")
+                self._note_block_signal(weight=1)
+                _finish("error", "антибот → браузер")
+                return None
+
+            if _suspicious_thread_html(url, html):
+                self._record_refusal("suspicious", url, status, final_url, html)
+                self._note_fast_block("подозрительный ответ")
+                _finish("warn", "проверка через браузер")
+                return None
+
+            self._rate.report(True)
+            with self._fast_lock:
+                self._fast_block_count = 0
+                self._fast_only_cycles = 0
+            self._bump("fast")
+            self._note_clean_hit()
+            _finish("done", f"{len(html) // 1024} КБ за {elapsed:.1f}с")
+            return html
+
+        self._note_fast_block(last_soft or "недоступно")
+        _finish("error", "недоступно → браузер")
+        return None
+
+    def _note_fast_block(self, reason: str):
+        self._bump("fast_block")
+        self._rate.report(False)
+        window = 0.0
+        with self._fast_lock:
+            self._fast_block_count += 1
+            n = self._fast_block_count
+            if n >= FAST_BLOCK_THRESHOLD:
+                self._fast_block_count = 0
+                # v1.17: адаптивное окно — каждый бесплодный цикл удваивает
+                # паузу (до потолка), успех/свежие cookies сбрасывают.
+                window = min(FAST_BROWSER_ONLY_BASE * (2 ** self._fast_only_cycles),
+                             FAST_BROWSER_ONLY_MAX)
+                self._fast_only_cycles += 1
+                self._fast_browser_only_until = time.monotonic() + window
+        if window > 0:
+            get_logger().warning(
+                f"fast: серия блокировок ({reason}) — "
+                f"только браузер на {window:.0f}с")
+
+    def _warn_auth_lost(self, hint: str = ""):
+        now = time.monotonic()
+        with self._fast_lock:
+            if now - self._auth_warn_at < 300:
+                return
+            self._auth_warn_at = now
+        extra = f"Разбор: {hint}. " if hint else ""
+        get_logger().warning(
+            f"fast: форум требует вход ({self._cookie_diag()}) — сессия мертва? "
+            f"{extra}"
+            "Нажмите «🔑 Войти» заново (с галочкой «Запомнить меня») или "
+            "«🍪 Проверить cookies» для диагностики.")
+
+    def verify_fast_session(self, probe_url: str = "") -> dict:
+        """Проверяет, узнаёт ли форум сохранённые cookies (v1.19).
+
+        Одноразовый GET главной через свежий requests.Session (TLS-кэш не трогаем).
+        Возвращает dict: ok / cause / kb / marker / cookies_n / xf_user / status / final.
+        Причины: ok | no_cookies | redirect_login | login_form | antibot |
+                 no_markers | http_NNN | error:<имя исключения>.
+        """
+        url = (probe_url or FORUM_BASE_URL).strip() or FORUM_BASE_URL
+        try:
+            with self._lock:
+                cookies = list(self._cookies)
+                ua = self._ua_override or UA
+        except Exception:
+            cookies = []
+            ua = "Mozilla/5.0"
+        res = {"ok": False, "cause": "", "kb": 0, "marker": "",
+               "cookies_n": len(cookies),
+               "xf_user": any(((c or {}).get("name") == "xf_user"
+                               and (c or {}).get("value") not in ("", "0", "deleted", None))
+                              for c in cookies)}
+        if not cookies:
+            res["cause"] = "no_cookies"
+            return res
+        try:
+            self._rate.wait()
+        except Exception:
+            pass
+        try:
+            sess = requests.Session()
+            sess.headers.update({
+                "User-Agent": ua,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "ru-RU,ru;q=0.9,en;q=0.8",
+                "Referer": FORUM_BASE_URL,
+                "Upgrade-Insecure-Requests": "1",
+            })
+            sess.cookies = self._fresh_jar()
+            r = sess.get(url, timeout=FAST_TIMEOUT, allow_redirects=True)
+            status = getattr(r, "status_code", 0) or 0
+            final_url = getattr(r, "url", url) or url
+            try:
+                html = r.text or ""
+            except Exception:
+                html = ""
+        except Exception as e:
+            res["cause"] = f"error:{type(e).__name__}"
+            return res
+        res["kb"] = len(html) // 1024
+        res["final"] = final_url
+        res["status"] = status
+        if status != 200:
+            res["cause"] = f"http_{status}"
+            return res
+        if _is_login_url(final_url):
+            res["cause"] = "redirect_login"
+            return res
+        if _looks_like_login_page(html):
+            _a = analyze_login_refusal(html, url)
+            res["analysis"] = _a
+            if _a["strong"] and _a["content_ok"]:
+                res["marker"] = _a["markers"][0] if _a["markers"] else ""
+                res["ok"] = True
+                res["cause"] = "ok"
+                res["note"] = "форма входа проигнорирована: есть маркеры входа"
+                return res
+            res["cause"] = "login_form"
+            return res
+        if not html_ok(html):
+            res["cause"] = "antibot"
+            return res
+        found = _login_markers_found(html)
+        res["marker"] = found[0] if found else ""
+        if found:
+            res["ok"] = True
+            res["cause"] = "ok"
+        else:
+            res["cause"] = "no_markers"
+        return res
+
+    # ── ленивый старт браузера ───────────────────────────────
+    def _ensure_browser(self) -> bool:
+        with self._fallback_lock:
+            if self.browser_fallback:
+                return True
+        ensurer = self.browser_ensurer
+        if not ensurer:
+            return False
+        now = time.monotonic()
+        with self._fallback_lock:
+            if now - self._last_ensure_attempt < 60.0:
+                return self.browser_fallback is not None
+            self._last_ensure_attempt = now
+        try:
+            ok = bool(ensurer())
+        except Exception as e:
+            get_logger().warning(f"browser_ensurer: {e}")
+            ok = False
+        with self._fallback_lock:
+            return bool(self.browser_fallback) or ok
+
+    def _maybe_harvest_cookies(self):
+        harvester = self.cookie_harvester
+        if not harvester:
+            return
+        with self._fast_lock:
+            need = (self._fast_block_count >= FAST_BLOCK_THRESHOLD
+                    or time.monotonic() < self._fast_browser_only_until)
+        if not need:
+            return
+        try:
+            fresh = harvester()
+        except Exception:
+            return
+        if self.merge_cookies(fresh or []):
+            get_logger().info("cookies обновлены из браузера — быстрый путь восстановлен")
+            with self._fast_lock:
+                self._fast_block_count = 0
+                now = time.monotonic()
+                if self._fast_browser_only_until > now + 60.0:
+                    self._fast_browser_only_until = now + 60.0
+
+    # ── путь через браузер (логика 1.15 без изменений) ───────
+    def _get_via_browser(self, url: str, retries: int = 5, emitter=None, parent_id=None):
+        if not self._ensure_browser():
+            get_logger().error(f"Нет активного браузера — запрос отклонён: {url}")
+            with self._fallback_lock:
+                self.no_browser_errors += 1
+            return None
+
         with self._fallback_lock:
             fb = self.browser_fallback
 
@@ -879,7 +1686,7 @@ class HttpClient:
 
             time.sleep(min(wait_cooldown, 30.0))
 
-        time.sleep(random.uniform(PAGE_DELAY_MIN, PAGE_DELAY_MAX))
+        time.sleep(random.uniform(PAGE_DELAY_MIN, PAGE_DELAY_MAX) * self.stealth_mult)
 
         for attempt in range(retries):
             try:
@@ -890,6 +1697,9 @@ class HttpClient:
                         self._block_count = 0
                     with self._fallback_lock:
                         self.no_browser_errors = 0
+                    self._bump("browser")
+                    self._note_clean_hit()
+                    self._maybe_harvest_cookies()
                     return html
 
                 with self._block_lock:
@@ -898,6 +1708,8 @@ class HttpClient:
 
                 if block_count >= BROWSER_FALLBACK_THRESHOLD:
                     cooldown = 180.0 + random.uniform(0.0, 120.0)
+                    # v1.21: серия в браузере останавливает и быстрый канал тоже.
+                    self._note_block_signal(weight=2)
                     with self._block_lock:
                         self._block_count = 0
                         self._cooldown_until = time.monotonic() + cooldown
@@ -909,11 +1721,13 @@ class HttpClient:
                         s_pause = em.step_added(parent_id, f"Пауза антибота {cooldown:.0f}с", "⏸")
                         em.step_state(s_pause, "paused")
 
-                    time.sleep(cooldown)
+                    if not self._sleep_abortable(cooldown):
+                        return None
                     continue
 
                 if html and "page could not be loaded" in html.lower():
                     wait = 8.0 * (attempt + 1) + random.uniform(3.0, 10.0)
+                    self._note_block_signal(weight=1)
                     get_logger().warning(
                         f"browser: 'Page could not be loaded' ({attempt + 1}/{retries}), ждём {wait:.1f}с: {url}")
 
@@ -925,7 +1739,8 @@ class HttpClient:
                         )
                         em.step_state(s_retry, "paused")
 
-                    time.sleep(wait)
+                    if not self._sleep_abortable(wait):
+                        return None
                     continue
 
                 get_logger().warning(f"browser: пустой/заблокированный ответ ({attempt + 1}/{retries}): {url}")
@@ -938,7 +1753,8 @@ class HttpClient:
                     )
                     em.step_state(s_retry, "paused")
 
-                time.sleep(5.0 * (attempt + 1) + random.uniform(2.0, 8.0))
+                if not self._sleep_abortable(5.0 * (attempt + 1) + random.uniform(2.0, 8.0)):
+                    return None
 
             except Exception as e:
                 with self._block_lock:
@@ -954,9 +1770,43 @@ class HttpClient:
                     )
                     em.step_state(s_retry, "paused")
 
-                time.sleep(5.0 * (attempt + 1) + random.uniform(2.0, 8.0))
+                if not self._sleep_abortable(5.0 * (attempt + 1) + random.uniform(2.0, 8.0)):
+                    return None
 
         return None
+
+    # ── скачивание файлов общей сессией (картинки форума) ────
+    def download_bytes(self, url: str, timeout: int = 15, referer: str = "") -> bytes | None:
+        """Скачивание файла keep-alive сессией с cookies. Только forum-хост."""
+        try:
+            host = (urlparse(url).netloc or "").lower()
+        except Exception:
+            return None
+        if not host.endswith(FORUM_HOST.lower()):
+            return None
+        if not self.has_cookies():
+            return None
+        if not self._wait_breaker():
+            return None
+        try:
+            self._rate.wait()
+            sess = self._session()
+            sess.cookies = self._fresh_jar()
+            r = sess.get(url, headers={
+                "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                "Referer": referer or FORUM_BASE_URL,
+                "Sec-Fetch-Dest": "image",
+                "Sec-Fetch-Mode": "no-cors",
+                "Sec-Fetch-Site": "same-origin",
+            }, timeout=timeout)
+            if not r.ok:
+                return None
+            if not _valid_image_bytes(r.content):
+                return None
+            return r.content
+        except Exception:
+            return None
+
 
 def base_of(url: str) -> str:
     p = urlparse(url)
@@ -964,6 +1814,22 @@ def base_of(url: str) -> str:
 
 def abs_url(href: str, base: str) -> str:
     return urljoin(base, href).split("#")[0].rstrip("/")
+
+def plural(n, one: str, few: str, many: str) -> str:
+    """Русская plural-форма: 1 пост, 3 поста, 5 постов (v1.17)."""
+    try:
+        n = abs(int(n))
+    except Exception:
+        return many
+    if 11 <= (n % 100) <= 14:
+        return many
+    d = n % 10
+    if d == 1:
+        return one
+    if 2 <= d <= 4:
+        return few
+    return many
+
 
 def norm_url(url: str) -> str:
     """Ключ для дедупликации: lower, без слеша, без query/fragment."""
@@ -1154,7 +2020,7 @@ def find_subforums(soup: BeautifulSoup, base: str, debug_cb=None):
                             debug_cb(f"    ✅ [sibling] '{sub_title}' → {u}")
 
             if debug_cb:
-                debug_cb(f"    → подразделов в категории: {len(cat_node.children)}")
+                debug_cb(f"    → в категории: {len(cat_node.children)} {plural(len(cat_node.children), 'подраздел', 'подраздела', 'подразделов')}")
 
             result.append(cat_node)
 
@@ -1638,7 +2504,7 @@ def parse_thread_content(http: HttpClient, thread: dict, first_post_only: bool, 
         posts += page_posts
 
         if em and s_page:
-            em.step_metric(s_page, "detail", f"{len(page_posts)} постов")
+            em.step_metric(s_page, "detail", f"{len(page_posts)} {plural(len(page_posts), 'пост', 'поста', 'постов')}")
 
         if first_post_only and posts:
             break
@@ -1735,11 +2601,24 @@ def gather_subtree_threads(node: Node, is_checked=None):
     walk(node)
     return result
 
+def _merge_key(u: str) -> str:
+    """Ключ слияния: якоря /#... — точным URL, остальное — norm_url.
+
+    v1.16: раньше все якорные категории схлопывались norm_url() в один ключ "/"
+    и при слиянии получали пометки одного произвольного якоря.
+    """
+
+    u = (u or "").strip()
+    if u.startswith("#") or u.startswith("/#"):
+        return u.lower().rstrip("/")
+    return norm_url(u)
+
+
 def _index_nodes_by_url(nodes):
     """Плоский индекс url → Node по всему дереву (для быстрого поиска при merge)."""
     idx = {}
     def walk(n):
-        idx[norm_url(n.url)] = n
+        idx[_merge_key(n.url)] = n
         for c in n.children:
             walk(c)
     for n in nodes or []:
@@ -1757,7 +2636,7 @@ def merge_preserve_state(new_nodes: list, old_nodes: list):
     old_idx = _index_nodes_by_url(old_nodes)
 
     def walk(n: Node):
-        old = old_idx.get(norm_url(n.url))
+        old = old_idx.get(_merge_key(n.url))
         if old:
             n.mark = old.mark
             n.thread_checks = dict(old.thread_checks)
@@ -1785,6 +2664,48 @@ def compute_content_checksum(data: dict) -> str:
     except Exception:
         payload = str(data.get("posts", []))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _diff_meta_fallback(old_posts: list, new_posts: list) -> list:
+    """Диагностика, когда посты отличаются, а построчных diff нет (v1.17).
+
+    Такое бывает при смене автора/даты, URL картинок, пробелов: checksum
+    видит разницу, а нормализованные строки совпадают. Возвращает поясняющие
+    строки, чтобы тема не помечалась загадочным «0 изм.».
+    """
+    out = []
+    if len(old_posts) != len(new_posts):
+        out.append(f"    МЕТА: постов: {len(old_posts)} → {len(new_posts)} (текст совпал)")
+        return out
+    for i, (op, np_) in enumerate(zip(old_posts, new_posts)):
+        if not isinstance(op, dict) or not isinstance(np_, dict):
+            if op != np_:
+                out.append(f"[Пост #{i+1}] МЕТА: техническое изменение (текст совпал)")
+            continue
+        if op == np_:
+            continue
+        marks = []
+        if (op.get("author") or "") != (np_.get("author") or ""):
+            marks.append(f"автор: «{op.get('author', '?')}» → «{np_.get('author', '?')}»")
+        if (op.get("date") or "") != (np_.get("date") or ""):
+            marks.append(f"дата: «{op.get('date', '?')}» → «{np_.get('date', '?')}»")
+        ob, nb = op.get("blocks", []), np_.get("blocks", [])
+        if isinstance(ob, list) and isinstance(nb, list) and len(ob) != len(nb):
+            marks.append(f"блоков: {len(ob)} → {len(nb)}")
+        elif isinstance(ob, list) and isinstance(nb, list):
+            osrc = sorted(b.get("src", "") for b in ob
+                          if isinstance(b, dict) and b.get("type") == "image")
+            nsrc = sorted(b.get("src", "") for b in nb
+                          if isinstance(b, dict) and b.get("type") == "image")
+            if osrc != nsrc:
+                marks.append(f"картинки: состав изменился ({len(osrc)} → {len(nsrc)})")
+        if marks:
+            out.append(f"[Пост #{i+1}] МЕТА: " + "; ".join(marks))
+        else:
+            out.append(f"[Пост #{i+1}] МЕТА: техническое изменение (текст совпал)")
+    if not out:
+        out.append("    МЕТА: техническое изменение структуры (текст совпал)")
+    return out
 
 
 def diff_thread_blocks(old_data: dict, new_data: dict) -> list:
@@ -1819,7 +2740,169 @@ def diff_thread_blocks(old_data: dict, new_data: dict) -> list:
                 chunk.append(f"    ДОБАВЛЕНО: {' | '.join(new_lines[j1:j2])}")
         if len(chunk) > 1:
             out.extend(chunk)
+    if not out and (old_posts != new_posts):
+        # v1.17: checksum различается, а строковых diff нет — поясняем.
+        out.extend(_diff_meta_fallback(old_posts, new_posts))
     return out
+
+# ── v1.17: журнал изменений тем ──────────────────────────────────
+HISTORY_TS_FMT = "%Y-%m-%d %H:%M:%S"
+HISTORY_KIND_ICON = {"new": "🆕", "changed": "♻️", "found": "🔎", "gone": "⚠"}
+HISTORY_KIND_LABEL = {
+    "new": "Первый парсинг",
+    "changed": "Изменилась",
+    "found": "Найдена при Этапе 2",
+    "gone": "Исчезла из раздела",
+}
+
+
+def history_now_ts() -> str:
+    return datetime.now().strftime(HISTORY_TS_FMT)
+
+
+def history_path(project_dir) -> Path:
+    return Path(project_dir) / HISTORY_FILE
+
+
+def load_history(project_dir) -> dict:
+    """Читает history.json. Отсутствует/бит — пустой журнал."""
+    try:
+        p = history_path(project_dir)
+        if not p.exists():
+            return {"topics": {}}
+        data = json.loads(p.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and isinstance(data.get("topics"), dict):
+            return data
+        if isinstance(data, dict):
+            return {"topics": data}
+    except Exception:
+        pass
+    return {"topics": {}}
+
+
+def save_history(project_dir, data: dict) -> bool:
+    try:
+        history_path(project_dir).write_text(
+            json.dumps(data or {"topics": {}}, ensure_ascii=False, indent=1),
+            encoding="utf-8",
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _history_sig(kind: str, checksum: str) -> str:
+    return f"{kind}|{checksum or ''}"
+
+
+def history_append(data: dict, url: str, kind: str, title: str = "",
+                   section: str = "", checksum: str = "", diff=None,
+                   ts: str = None, first_url: str = "", scopes=None) -> bool:
+    """Добавляет событие в журнал. False — дубль (не добавлено).
+
+    Дедуп: подряд два одинаковых события (вид + checksum) не пишутся.
+    Ограничения: событий на тему — HISTORY_MAX_EVENTS (старые вытесняются),
+    строк diff — HISTORY_MAX_DIFF_LINES, длина строки — HISTORY_MAX_LINE_LEN.
+    """
+    try:
+        key = norm_thread_url(url or "")
+    except Exception:
+        key = (url or "").strip().lower()
+    if not key:
+        return False
+    if not isinstance(data, dict):
+        return False
+    topics = data.setdefault("topics", {})
+    t = topics.setdefault(key, {"title": "", "url": "", "updated": "", "events": [], "scopes": []})
+    if scopes:
+        known = t.setdefault("scopes", [])
+        for _s in scopes:
+            _s = str(_s or "").strip()
+            if _s and _s not in known:
+                known.append(_s)
+                if len(known) > 20:
+                    del known[:len(known) - 20]
+    if title:
+        t["title"] = title
+    if not t.get("url"):
+        t["url"] = first_url or url or ""
+    sig = _history_sig(kind, checksum)
+    evts = t.setdefault("events", [])
+    if evts:
+        last = evts[-1] or {}
+        if _history_sig(last.get("kind", ""), last.get("checksum", "")) == sig:
+            return False
+    lines = []
+    for ln in (diff or [])[:HISTORY_MAX_DIFF_LINES]:
+        s = str(ln)
+        if len(s) > HISTORY_MAX_LINE_LEN:
+            s = s[:HISTORY_MAX_LINE_LEN] + "…"
+        lines.append(s)
+    if diff and len(diff) > HISTORY_MAX_DIFF_LINES:
+        lines.append(f"… обрезано, всего строк: {len(diff)}")
+    stamp = ts or history_now_ts()
+    evts.append({
+        "ts": stamp, "kind": kind, "title": title or t.get("title", ""),
+        "section": section or "", "checksum": checksum or "", "diff": lines,
+        "scopes": [str(s) for s in (scopes or []) if str(s or "").strip()],
+    })
+    if len(evts) > HISTORY_MAX_EVENTS:
+        del evts[:len(evts) - HISTORY_MAX_EVENTS]
+    t["updated"] = stamp
+    return True
+
+
+def history_sorted_events(topic: dict, newest_first: bool = True) -> list:
+    evts = list((topic or {}).get("events", []))
+    if newest_first:
+        evts.reverse()
+    return evts
+
+
+def history_event_segments(ev: dict) -> list:
+    """Событие → [(текст, тег)] для вставки в Text (чистая функция)."""
+    kind = (ev or {}).get("kind", "")
+    ts = (ev or {}).get("ts", "")
+    icon = HISTORY_KIND_ICON.get(kind, "•")
+    label = HISTORY_KIND_LABEL.get(kind, kind)
+    seg = [(f"{icon} {ts} — {label}", "h_date")]
+    section = (ev or {}).get("section", "")
+    if section:
+        seg.append((f"    Раздел: {section}", "ctx"))
+    _scopes = [s for s in ((ev or {}).get("scopes") or []) if s]
+    if _scopes:
+        _names = []
+        for _s in _scopes:
+            if _s == "general":
+                _names.append("Общие правила")
+            elif str(_s).startswith("server:"):
+                _names.append(f"Сервер «{str(_s)[7:]}»")
+            else:
+                _names.append(str(_s))
+        seg.append((f"    Слой: {'; '.join(_names)}", "ctx"))
+    if kind == "new":
+        seg.append(("    Первый парсинг темы, содержимое сохранено в кэш.", "ctx"))
+    elif kind == "found":
+        seg.append(("    Тема впервые найдена при сканировании (Этап 2).", "ctx"))
+    elif kind == "gone":
+        seg.append(("    Тема была выбрана, но не найдена при повторном сканировании.", "ctx"))
+    for ln in (ev or {}).get("diff", []):
+        s = str(ln)
+        st = s.strip()
+        if st.startswith("БЫЛО:"):
+            seg.append((s, "was"))
+        elif st.startswith("СТАЛО:"):
+            seg.append((s, "became"))
+        elif st.startswith("ДОБАВЛЕНО:"):
+            seg.append((s, "add"))
+        elif st.startswith("УДАЛЕНО:"):
+            seg.append((s, "dlt"))
+        elif st.startswith("[Пост"):
+            seg.append((s, "post"))
+        else:
+            seg.append((s, "ctx"))
+    return seg
+
 
 class Scanner:
     """
@@ -1998,12 +3081,12 @@ class Scanner:
                 for child in cat_node.children:
                     self._try_visit(child.url)
                 roots.append(cat_node)
-                self.log(f"  🌐 {cat_node.title} ({len(cat_node.children)} подразделов)")
+                self.log(f"  🌐 {cat_node.title} ({len(cat_node.children)} {plural(len(cat_node.children), 'подраздел', 'подраздела', 'подразделов')})")
                 for child in cat_node.children:
                     self.log(f"      📁 {child.title}")
                 if em and s_parse:
                     s_cat = em.step_added(s_parse, f"📌 {cat_node.title}", "📌")
-                    em.step_state(s_cat, "done", f"{len(cat_node.children)} подразделов")
+                    em.step_state(s_cat, "done", f"{len(cat_node.children)} {plural(len(cat_node.children), 'подраздел', 'подраздела', 'подразделов')}")
                     for child in cat_node.children:
                         s_sub = em.step_added(s_cat, f"📁 {child.title}", "📁")
                         em.step_state(s_sub, "done")
@@ -2039,11 +3122,11 @@ class Scanner:
                 roots.append(Node(url, title))
                 self.log(f"  🆘 {title}")
             if em and s_fb:
-                em.step_state(s_fb, "done", f"{len(fallback)} разделов")
+                em.step_state(s_fb, "done", f"{len(fallback)} {plural(len(fallback), 'раздел', 'раздела', 'разделов')}")
         self.log(f"\n✅ Этап 1 завершён.")
         self.log(f"   Категорий верхнего уровня: {len(roots)}")
-        self.log(f"   Всего подразделов:         "
-                 f"{sum(len(n.children) for n in roots)}")
+        _tot_sub = sum(len(n.children) for n in roots)
+        self.log(f"   Всего: {_tot_sub} {plural(_tot_sub, 'подраздел', 'подраздела', 'подразделов')}")
         return roots
 
     # ──────────────────────────────────────────────
@@ -2053,10 +3136,11 @@ class Scanner:
     def scan_deep(self, selected_nodes: list) -> None:
         self.log("")
         self.log("=" * 60)
-        self.log(f"🔍 ЭТАП 2: Глубокое сканирование {len(selected_nodes)} разделов")
+        self.log(f"🔍 ЭТАП 2: Глубокое сканирование {len(selected_nodes)} {plural(len(selected_nodes), 'раздел', 'раздела', 'разделов')}")
         self.log("=" * 60)
         total_done = [0]
-        total_nodes = [len(selected_nodes)]
+        # v1.17: total — всё известное поддерево (раньше только корни → 1000%+).
+        total_nodes = [sum(len(flatten_nodes([n])) for n in selected_nodes)]
         em = self.emitter
         root_pid = self.emitter_parent
 
@@ -2125,7 +3209,7 @@ class Scanner:
             }
             threads = self._collect_thread_titles(soup, base, node.url, emitter=em, parent_id=s_threads)
             new_urls = {norm_thread_url(t["url"]) for t in threads}
-            thread_dates = load_thread_dates(self.project_dir)
+            thread_dates = load_thread_dates_cached(self.project_dir)
             cfg_kw = _autocheck_thread_keywords
             for t in threads:
                 thr_url = t.get("url", "")
@@ -2134,29 +3218,29 @@ class Scanner:
                 kw_eval = evaluate_thread_keyword_match(thr_title, cached_date, cfg_kw)
                 if kw_eval == 'uncheck':
                     node.thread_checks[thr_url] = False
-                elif kw_eval == 'check' or should_autocheck_new_thread(thr_title):
+                elif (kw_eval == 'check' or should_autocheck_new_thread(thr_title)) \
+                        and not is_excluded_by_words(thr_title, node.title, _autocheck_thread_exclude):
                     node.thread_checks[thr_url] = True
             disappeared = old_checked_urls - new_urls
             if disappeared:
-                disappeared_titles = [
-                    t["title"] for t in old_threads
-                    if norm_thread_url(t["url"]) in disappeared
-                ]
-                for title in disappeared_titles:
+                for t in old_threads:
+                    if norm_thread_url(t["url"]) not in disappeared:
+                        continue
+                    title = t["title"]
                     self.log(
                         f"{indent}  ⚠ ВНИМАНИЕ: ранее выбранная тема пропала "
                         f"после повторного сканирования: «{title}»"
                     )
-                    self.disappeared_selected_threads.append((node.title, title))
+                    self.disappeared_selected_threads.append((node.title, title, t["url"]))
             appeared = new_urls - old_urls
             if appeared:
                 appeared_threads = [
                     t for t in threads
                     if norm_thread_url(t["url"]) in appeared
                 ]
-                self.log(f"{indent}  🆕 Новых тем найдено: {len(appeared_threads)}")
+                self.log(f"{indent}  🆕 {len(appeared_threads)} {plural(len(appeared_threads), 'новая тема', 'новые темы', 'новых тем')}")
                 autochecked_count = 0
-                thread_dates = load_thread_dates(self.project_dir)
+                thread_dates = load_thread_dates_cached(self.project_dir)
                 cfg_kw = _autocheck_thread_keywords
                 for t in appeared_threads:
                     title = t.get("title", "")
@@ -2166,13 +3250,17 @@ class Scanner:
                         node.thread_checks[t["url"]] = False
                         self.log(f"{indent}    ⏭ Пропущена (дата до фильтра): {title}")
                     elif kw_eval == 'check' or should_autocheck_new_thread(title):
-                        node.thread_checks[t["url"]] = True
-                        autochecked_count += 1
-                        self.log(f"{indent}    ✅ Автоотметка темы: {title}")
+                        if is_excluded_by_words(title, node.title, _autocheck_thread_exclude):
+                            node.thread_checks[t["url"]] = False
+                            self.log(f"{indent}    ⏭ Пропущена (слово-исключение): {title}")
+                        else:
+                            node.thread_checks[t["url"]] = True
+                            autochecked_count += 1
+                            self.log(f"{indent}    ✅ Автоотметка темы: {title}")
                     else:
                         node.thread_checks[t["url"]] = False
                         self.log(f"{indent}    + {title}")
-                    self.new_threads_found.append((node.title, title))
+                    self.new_threads_found.append((node.title, title, t["url"]))
                 if autochecked_count:
                     self.log(
                         f"{indent}    ✅ Автоматически отмечено новых тем: "
@@ -2182,7 +3270,8 @@ class Scanner:
             node.thread_count = len(threads)
             autochecked_existing = 0
             unchecked_by_date = 0
-            thread_dates = load_thread_dates(self.project_dir)
+            unchecked_by_exclude = 0
+            thread_dates = load_thread_dates_cached(self.project_dir)
             cfg_kw = _autocheck_thread_keywords
             for t in threads:
                 thr_url = t.get("url", "")
@@ -2190,7 +3279,12 @@ class Scanner:
                 cached_date = thread_dates.get(norm_thread_url(thr_url), '')
                 kw_eval = evaluate_thread_keyword_match(thr_title, cached_date, cfg_kw)
                 node_match = should_autocheck_new_node(thr_title)
-                if kw_eval == 'uncheck':
+                if is_excluded_by_words(thr_title, node.title, _autocheck_thread_exclude):
+                    # v1.22: исключение бьёт всё — снимаем и старые, и ручные галочки.
+                    if node.thread_checks.get(thr_url, False):
+                        node.thread_checks[thr_url] = False
+                        unchecked_by_exclude += 1
+                elif kw_eval == 'uncheck':
                     if node.thread_checks.get(thr_url, False):
                         node.thread_checks[thr_url] = False
                         unchecked_by_date += 1
@@ -2202,10 +3296,12 @@ class Scanner:
                 self.log(f"{indent}    ✅ Автоотметка существующих тем по ключевым словам: {autochecked_existing}")
             if unchecked_by_date:
                 self.log(f"{indent}    ⏭ Снято отметок (дата до фильтра): {unchecked_by_date}")
+            if unchecked_by_exclude:
+                self.log(f"{indent}    ⏭ Снято отметок (исключения): {unchecked_by_exclude}")
             if threads:
                 self.log(f"{indent}  📄 Тем: {len(threads)}")
             if em and s_threads:
-                em.step_state(s_threads, "done", f"{len(threads)} тем")
+                em.step_state(s_threads, "done", f"{len(threads)} {plural(len(threads), 'тема', 'темы', 'тем')}")
             total_done[0] += 1
             self.progress(f"Обработано: {total_done[0]}/{total_nodes[0]}")
             if em and root_pid:
@@ -2215,7 +3311,7 @@ class Scanner:
                     break
                 dfs(child, depth + 1, emitter_pid=s_node)
             if em and s_node:
-                em.step_state(s_node, "done", f"{len(threads)} тем, {len(new_children)} новых подразделов")
+                em.step_state(s_node, "done", f"{len(threads)} {plural(len(threads), 'тема', 'темы', 'тем')}, {len(new_children)} {plural(len(new_children), 'новый подраздел', 'новых подраздела', 'новых подразделов')}")
 
         for node in selected_nodes:
             if self.abort.is_set():
@@ -2227,12 +3323,12 @@ class Scanner:
             all_nodes.extend(flatten_nodes([n]))
         self.log("")
         self.log(f"✅ Этап 2 завершён.")
-        self.log(f"   Обработано разделов: {len(all_nodes)}")
+        self.log(f"   Обработано: {len(all_nodes)} {plural(len(all_nodes), 'раздел', 'раздела', 'разделов')}")
         self.log(f"   Тем найдено:         {sum(n.thread_count for n in all_nodes)}")
         if self.disappeared_selected_threads:
-            self.log(f"   ⚠ Пропало ранее выбранных тем: {len(self.disappeared_selected_threads)}")
+            self.log(f"   ⚠ {len(self.disappeared_selected_threads)} {plural(len(self.disappeared_selected_threads), 'пропавшая выбранная тема', 'пропавшие выбранные темы', 'пропавших выбранных тем')}")
         if self.new_threads_found:
-            self.log(f"   🆕 Найдено новых тем: {len(self.new_threads_found)}")
+            self.log(f"   🆕 {len(self.new_threads_found)} {plural(len(self.new_threads_found), 'новая найденная тема', 'новые найденные темы', 'новых найденных тем')}")
 
     def _collect_thread_titles(self, soup: BeautifulSoup,
                                base: str, forum_url: str,
@@ -2256,13 +3352,16 @@ class Scanner:
                     seen.add(k)
                     threads.append(t)
             if em and s_page:
-                em.step_state(s_page, "done", f"{len(page_threads)} тем")
+                em.step_state(s_page, "done", f"{len(page_threads)} {plural(len(page_threads), 'тема', 'темы', 'тем')}")
             next_url = next_page_url(cur_soup, base)
             if not next_url or next_url == url:
                 break
             url = next_url
             page += 1
-            time.sleep(random.uniform(PAGE_DELAY_MIN, PAGE_DELAY_MAX))
+            if self.http.fast_enabled:
+                time.sleep(random.uniform(FAST_DELAY_MIN, FAST_DELAY_MAX) * self.http.stealth_mult)
+            else:
+                time.sleep(random.uniform(PAGE_DELAY_MIN, PAGE_DELAY_MAX) * self.http.stealth_mult)
             html = self.http.get(url, emitter=em, parent_id=pid)
             if not html:
                 break
@@ -2498,7 +3597,7 @@ def threads_to_lines(threads, cache, topic_filters=None, abbreviations=None, tel
 
     if thread_dates is None:
         try:
-            thread_dates = load_thread_dates(Project(FORUM_BASE_URL).dir)
+            thread_dates = load_thread_dates_cached(Project(FORUM_BASE_URL).dir)
         except Exception:
             thread_dates = {}
 
@@ -2596,6 +3695,10 @@ def _collapse_paragraphs(doc):
             i += 1
 
 
+END_ANSWER_MARKER = "===КОНЕЦ ОТВЕТА==="
+DOC_TAIL_TEXT = "Действую согласно промта в начале файла и в конце ответа всегда отвечай ===КОНЕЦ ОТВЕТА===."
+
+
 class DocxGen:
     def __init__(self):
         self.doc = Document()
@@ -2624,6 +3727,38 @@ class DocxGen:
         pf.line_spacing = DOC_LS
         r = p.add_run(text)
 
+    def flatten(self):
+        """v1.18: аналог Word-замены ^p -> " " (повторять, пока замен > 0).
+
+        Весь документ схлопывается в один абзац: тексты всех абзацев идут
+        подряд через одиночные пробелы. Первый абзац переиспользуется,
+        остальные удаляются (sectPr не трогаем).
+        """
+        paras = list(self.doc.paragraphs)
+        if not paras:
+            return
+        # ^p -> " ": склейка текстов через пробел (пустые пропускаем).
+        joined = " ".join((p.text or "").strip() for p in paras if (p.text or "").strip())
+        # Цикл "пока замен не будет 0": схлопываем кратные пробелы.
+        while "  " in joined:
+            joined = joined.replace("  ", " ")
+        joined = joined.strip()
+        # v1.19: вычищаем "=" и "_" — кроме маркера конца ответа.
+        _guard = "\u0001END\u0001"
+        joined = joined.replace(END_ANSWER_MARKER, _guard)
+        joined = joined.replace("=", "").replace("_", "")
+        joined = joined.replace(_guard, END_ANSWER_MARKER)
+        # Удаление символов могло склеить пробелы — повторяем цикл до нуля замен.
+        while "  " in joined:
+            joined = joined.replace("  ", " ")
+        joined = joined.strip()
+        first = paras[0]
+        body = self.doc.element.body
+        for p in paras[1:]:
+            body.remove(p._element)
+        # paragraph.text = ... чистит раны; форматирование абзаца остаётся.
+        first.text = joined
+
     def save(self, path):
         # Удаляем мусорные rsid
         _remove_rsid_attrs(self.doc)
@@ -2635,13 +3770,26 @@ class DocxGen:
         self.doc.save(path)
 
 def build_server_docx(prompt_text: str, general_lines: list, server_title: str, server_lines: list):
+    """
+    Порядок слоёв в документе (v1.18, сверху вниз):
+      СЛОЙ 1 — ПРОМТ (самый верх);
+      СЛОЙ 2 — ОБЩИЕ ПРАВИЛА (правила проекта);
+      СЛОЙ 3 — ЗАКОНОДАТЕЛЬНАЯ БАЗА конкретного сервера.
+    Добавочный хвостовой шаблон про конец ответа удалён (ещё в v1.15):
+    требование о нём уже есть в самом промте.
+    Финал: весь документ схлопнут в один абзац — аналог Word-замены
+    ^p -> " " (повторять, пока замен не будет 0).
+    v1.19: в конце — хвост-приказ; "=" и "_" вычищены,
+    кроме маркера ===КОНЕЦ ОТВЕТА===.
+    """
     g = DocxGen()
+    # ── СЛОЙ 1: промт — САМЫЙ ВЕРХ документа ──
     if prompt_text:
         for ln in prompt_text.split("\n"):
             g.add(ln.rstrip("\r"))
-        g.add()
         g.add("=" * 60)
         g.add()
+    # ── СЛОЙ 2: общие правила проекта ──
     g.add("ОБЩИЕ ПРАВИЛА")
     g.add()
     for ln in general_lines:
@@ -2649,38 +3797,48 @@ def build_server_docx(prompt_text: str, general_lines: list, server_title: str, 
     g.add()
     g.add("=" * 60)
     g.add()
+    # ── СЛОЙ 3: законодательная база конкретного сервера ──
     g.add(f"ЗАКОНОДАТЕЛЬНАЯ БАЗА: {server_title}")
     g.add()
     for ln in server_lines:
         g.add(ln)
-
-    g.add("В конце ответа всегда пиши «===КОНЕЦ ОТВЕТА===» ни при каких обстоятельствах не пропускай данный шаблон. Ответ ВСЕГДА должен заканчиваться строкой ===КОНЕЦ ОТВЕТА===")
+    # ── v1.19: хвост-приказ в самый конец ──
+    g.add(DOC_TAIL_TEXT)
+    # ── Финал v1.18: всё в один абзац ──
+    g.flatten()
     return g
 
-def build_common_docx(prompt_text: str, general_lines: list):
-    g = DocxGen()
 
+def build_common_docx(prompt_text: str, general_lines: list):
+    """
+    Порядок слоёв в документе (v1.18, сверху вниз):
+      СЛОЙ 1 — ПРОМТ (самый верх);
+      СЛОЙ 2 — ОБЩИЕ ПРАВИЛА.
+    Добавочный хвостовой шаблон про конец ответа удалён (ещё в v1.15):
+    требование о нём уже есть в самом промте.
+    Финал: весь документ схлопнут в один абзац — аналог Word-замены
+    ^p -> " " (повторять, пока замен не будет 0).
+    v1.19: в конце — хвост-приказ; "=" и "_" вычищены,
+    кроме маркера ===КОНЕЦ ОТВЕТА===.
+    """
+    g = DocxGen()
+    # ── СЛОЙ 1: промт — САМЫЙ ВЕРХ документа ──
     if prompt_text:
         for ln in prompt_text.split("\n"):
             g.add(ln.rstrip("\r"))
-
-        g.add()
         g.add("=" * 60)
         g.add()
-
+    # ── СЛОЙ 2: общие правила проекта ──
     g.add("ОБЩИЕ ПРАВИЛА")
     g.add()
-
     for ln in general_lines:
         g.add(ln)
-
-    g.add()
-    g.add("=" * 60)
-    g.add()
-
-    g.add("В конце ответа всегда пиши «===КОНЕЦ ОТВЕТА===» ни при каких обстоятельствах не пропускай данный шаблон. Ответ ВСЕГДА должен заканчиваться строкой ===КОНЕЦ ОТВЕТА===")
-
+    # ── v1.19: хвост-приказ в самый конец ──
+    g.add(DOC_TAIL_TEXT)
+    # ── Финал v1.18: всё в один абзац ──
+    g.flatten()
     return g
+
 
 class Project:
     def __init__(self, root_url: str):
@@ -3022,7 +4180,7 @@ def _download_image_browser_tab(driver, url: str, timeout: int = 25) -> bytes:
         return None
     new_handle = None
     t0 = time.monotonic()
-    while time.monotonic() - t0 < 5:
+    while time.monotonic() - t0 < 2:
         diff = set(driver.window_handles) - before
         if diff:
             new_handle = diff.pop()
@@ -3033,7 +4191,7 @@ def _download_image_browser_tab(driver, url: str, timeout: int = 25) -> bytes:
     try:
         driver.switch_to.window(new_handle)
         t1 = time.monotonic()
-        while time.monotonic() - t1 < 8:
+        while time.monotonic() - t1 < 4:
             try:
                 if driver.execute_script("return document.readyState;") == "complete":
                     break
@@ -3124,6 +4282,51 @@ def _ocr_image_bytes(data: bytes) -> str:
     _last_ocr_engine = ""
     return ""
 
+def _ocr_worth_running(data: bytes) -> bool:
+    """Стоит ли гнать движок OCR: отсекает иконки/пустышки (v1.17)."""
+    if not data or len(data) < OCR_MIN_BYTES:
+        return False
+    try:
+        from PIL import Image
+        import io as _io
+        with Image.open(_io.BytesIO(data)) as img:
+            w, h = img.size
+        if min(w, h) < OCR_MIN_DIM:
+            return False
+    except Exception:
+        pass
+    return True
+
+
+def _ocr_content_key(data: bytes) -> str:
+    try:
+        return hashlib.sha256(data or b"").hexdigest()[:32]
+    except Exception:
+        return ""
+
+
+def _ocr_lookup_by_content(data: bytes, images_dir) -> str | None:
+    """Уже распознанный такой же файл (другой URL, то же содержимое)?"""
+    if not data:
+        return None
+    try:
+        p = Path(images_dir) / f"c_{_ocr_content_key(data)}.txt"
+        if p.exists():
+            return p.read_text(encoding="utf-8")
+    except Exception:
+        pass
+    return None
+
+
+def _ocr_store_by_content(data: bytes, images_dir, text: str):
+    try:
+        p = Path(images_dir) / f"c_{_ocr_content_key(data)}.txt"
+        if not p.exists():
+            p.write_text(text or "", encoding="utf-8")
+    except Exception:
+        pass
+
+
 def _process_image_block(block: dict, ctx: dict) -> list:
     src = (block.get("src") or "").strip()
     alt = (block.get("alt") or "").strip()
@@ -3138,9 +4341,21 @@ def _process_image_block(block: dict, ctx: dict) -> list:
         url = "https:" + url
     em = ctx.get("emitter")
     pid = ctx.get("parent_id")
+    seq_box = ctx.get("seq_box")
+    if isinstance(seq_box, list) and seq_box:
+        seq_box[0] += 1
+        disp_no = seq_box[0]
+    else:
+        disp_no = ctx.get("count", 0)
+    seen = ctx.get("seen")
+    if isinstance(seen, dict) and url in seen:
+        if em and pid:
+            s_dup = em.step_added(pid, f"🖼 Изображение #{disp_no}", "🖼")
+            em.step_state(s_dup, "done", "дубль URL — из памяти")
+        return [dict(b) for b in seen[url]]
     s_img = None
     if em and pid:
-        s_img = em.step_added(pid, f"🖼 Изображение #{ctx['count']}", "🖼")
+        s_img = em.step_added(pid, f"🖼 Изображение #{disp_no}", "🖼")
         em.step_state(s_img, "running")
     images_dir = Path(ctx.get("images_dir") or (Path.cwd() / IMAGES_SUBDIR))
     images_dir.mkdir(parents=True, exist_ok=True)
@@ -3176,7 +4391,7 @@ def _process_image_block(block: dict, ctx: dict) -> list:
                 url,
                 cookies=ctx.get("cookies"),
                 referer=ctx.get("referer") or FORUM_BASE_URL,
-                timeout=10,
+                timeout=IMAGE_FALLBACK_TIMEOUT,
             )
             if raw:
                 method = "requests_fallback"
@@ -3186,6 +4401,8 @@ def _process_image_block(block: dict, ctx: dict) -> list:
                 em.step_state(s_dl, "error", f"не скачалось ({elapsed:.1f}с)")
             if em and s_img:
                 em.step_state(s_img, "error", f"не скачалось ({elapsed:.1f}с)")
+            if isinstance(ctx.get("seen"), dict):
+                ctx["seen"][url] = []
             return []
         if em and s_dl:
             size_kb = len(raw) // 1024
@@ -3216,22 +4433,33 @@ def _process_image_block(block: dict, ctx: dict) -> list:
                 raw = img_path.read_bytes()
             except Exception:
                 raw = b""
-        s_ocr = None
-        if em and s_img:
-            s_ocr = em.step_added(s_img, "OCR распознавание", "🔤")
-            em.step_state(s_ocr, "running")
-        t_ocr = time.monotonic()
-        ocr_text = _ocr_image_bytes(raw) if raw else ""
-        elapsed_ocr = time.monotonic() - t_ocr
-        if em and s_ocr:
-            em.step_state(s_ocr, "done", f"{elapsed_ocr:.1f}с, {len(ocr_text)} симв.")
+        content_hit = _ocr_lookup_by_content(raw, images_dir) if raw else None
+        if content_hit is not None:
+            ocr_text = content_hit
+            if em and s_img:
+                em.step_metric(s_img, "detail", "OCR по содержимому (дубль)")
+        elif not raw or not _ocr_worth_running(raw):
+            ocr_text = ""
+            if em and s_img:
+                em.step_metric(s_img, "detail", "пропуск OCR: маленькая")
+        else:
+            s_ocr = None
+            if em and s_img:
+                s_ocr = em.step_added(s_img, "OCR распознавание", "🔤")
+                em.step_state(s_ocr, "running")
+            t_ocr = time.monotonic()
+            ocr_text = _ocr_image_bytes(raw) if raw else ""
+            elapsed_ocr = time.monotonic() - t_ocr
+            if em and s_ocr:
+                em.step_state(s_ocr, "done", f"{elapsed_ocr:.1f}с, {len(ocr_text)} симв.")
+            _ocr_store_by_content(raw, images_dir, ocr_text)
         try:
             ocr_path.write_text(ocr_text or "", encoding="utf-8")
         except Exception:
             pass
     if em and s_img:
         em.step_state(s_img, "done", f"OCR: {len(ocr_text)} симв.")
-    return [
+    _res_blocks = [
         {
             "type": "image",
             "src": url,
@@ -3239,6 +4467,9 @@ def _process_image_block(block: dict, ctx: dict) -> list:
             "ocr_text": ocr_text or "",
         }
     ]
+    if isinstance(ctx.get("seen"), dict):
+        ctx["seen"][url] = [dict(b) for b in _res_blocks]
+    return _res_blocks
 
 def _process_blocks_with_images(blocks: list, ctx: dict) -> list:
     """Рекурсивно проходит по блокам и заменяет type='image' на текст + OCR."""
@@ -3264,6 +4495,9 @@ def enrich_thread_data_with_images(data: dict, project_dir: Path,
         return data
     images_dir = Path(project_dir) / IMAGES_SUBDIR
     base = base_url or data.get("url") or FORUM_BASE_URL
+    # v1.17: сквозная нумерация на тему + дедуп одинаковых URL между постами.
+    seq_box = [0]
+    seen = {}
     for post in data["posts"]:
         ctx = {
             "images_dir": images_dir,
@@ -3272,6 +4506,8 @@ def enrich_thread_data_with_images(data: dict, project_dir: Path,
             "referer": base_url or FORUM_BASE_URL,
             "fetcher": fetcher,
             "count": 0,
+            "seq_box": seq_box,
+            "seen": seen,
             "emitter": emitter,
             "parent_id": parent_id,
         }
@@ -3374,37 +4610,112 @@ def normalize_title_for_match(s: str) -> str:
 
 _autocheck_node_keywords = []
 _autocheck_thread_keywords = []
+_autocheck_thread_exclude = []
 
-def set_autocheck_keywords(node_kw, thread_kw):
-    global _autocheck_node_keywords, _autocheck_thread_keywords
+
+def set_autocheck_keywords(node_kw, thread_kw, thread_exclude=None):
+    global _autocheck_node_keywords, _autocheck_thread_keywords, _autocheck_thread_exclude
     _autocheck_node_keywords = list(node_kw or [])
     _autocheck_thread_keywords = list(thread_kw or [])
+    if thread_exclude is not None:
+        _autocheck_thread_exclude = list(thread_exclude)
+
+
+def is_excluded_by_words(title: str, section: str = "", exclude_words=None) -> bool:
+    """True, если слово-исключение входит в название темы или раздела (v1.19).
+
+    Используется и для автоотметки (исключения ключевых слов), и для
+    скрытия тем в «Истории». Пустой список = ничего не скрываем.
+    """
+    if not exclude_words:
+        return False
+    texts = [normalize_title_for_match(title), normalize_title_for_match(section or "")]
+    texts = [x for x in texts if x]
+    if not texts:
+        return False
+    for w in exclude_words:
+        if isinstance(w, dict):
+            w = w.get("word", "")
+        needle = normalize_title_for_match(str(w or ""))
+        if not needle:
+            continue
+        for x in texts:
+            if needle in x:
+                return True
+    return False
+
+def match_keyword(text: str, entry) -> bool:
+    """Совпадение ключевого слова: целое слово + позиция (v1.20).
+
+    entry: str — как раньше (подстрока, anywhere); dict —
+      {"keyword": ..., "whole": bool, "pos": "any|start|end"}.
+    whole=True: «закон» не совпадает с «законодательство».
+    pos="start"/"end": совпадение только в начале/в конце названия.
+    """
+    if isinstance(entry, dict):
+        kw = entry.get("keyword", "")
+        whole = bool(entry.get("whole", False))
+        pos = (entry.get("pos", "any") or "any").strip().lower()
+    else:
+        kw = entry
+        whole = False
+        pos = "any"
+    needle = normalize_title_for_match(str(kw or ""))
+    if not needle:
+        return False
+    ntext = normalize_title_for_match(text)
+    if not ntext:
+        return False
+    if pos not in ("any", "start", "end"):
+        pos = "any"
+    if whole:
+        if pos == "start":
+            return ntext == needle or ntext.startswith(needle + " ")
+        if pos == "end":
+            return ntext == needle or ntext.endswith(" " + needle)
+        return re.search(r"\b%s\b" % re.escape(needle), ntext) is not None
+    if pos == "start":
+        return ntext.startswith(needle)
+    if pos == "end":
+        return ntext.endswith(needle)
+    return needle in ntext
+
 
 def should_autocheck_new_node(title: str) -> bool:
-    t = normalize_title_for_match(title)
-    if not t:
-        return False
     for item in _autocheck_node_keywords:
-        needle = normalize_title_for_match(item)
-        if needle and needle in t:
+        if match_keyword(title, item):
             return True
     return False
 
 def should_autocheck_new_thread(title: str) -> bool:
-    t = normalize_title_for_match(title)
-    if not t:
-        return False
     for item in _autocheck_thread_keywords:
-        if isinstance(item, dict):
-            kw = item.get("keyword", "")
-        else:
-            kw = str(item)
-        needle = normalize_title_for_match(kw)
-        if needle and needle in t:
+        if match_keyword(title, item):
             return True
     return False
 
+_TIME_DT_RE = re.compile(
+    r'<time\b[^>]*\bclass\s*=\s*["\'][^"\']*\bu-dt\b[^"\']*["\'][^>]*>', re.IGNORECASE)
+_DATA_DATE_RE = re.compile(r'data-date\s*=\s*["\'](\d{2}\.\d{2}\.\d{4})["\']')
+_DT_ATTR_RE = re.compile(r'datetime\s*=\s*["\']([^"\']+)["\']')
+
+
 def extract_thread_creation_date(html):
+    # v1.16: быстрый путь — regex по первому <time class="u-dt"> без полного парсинга.
+    if html:
+        try:
+            m = _TIME_DT_RE.search(html[:200000])
+            if m:
+                tag = m.group(0)
+                dm = _DATA_DATE_RE.search(tag)
+                if dm:
+                    datetime.strptime(dm.group(1), '%d.%m.%Y')
+                    return dm.group(1)
+                dtm = _DT_ATTR_RE.search(tag)
+                if dtm:
+                    dt = datetime.fromisoformat(dtm.group(1)[:19])
+                    return dt.strftime('%d.%m.%Y')
+        except Exception:
+            pass
     try:
         soup = BeautifulSoup(html, BS_PARSER)
         time_el = soup.find('time', class_='u-dt')
@@ -3437,32 +4748,62 @@ def load_thread_dates(project_dir: Path) -> dict:
         return {}
 
 
+_thread_dates_lock = threading.Lock()
+_thread_dates_cache = {"key": None, "mtime": 0.0, "data": {}}
+
+
 def save_thread_dates(project_dir: Path, dates: dict):
     p = thread_dates_path(project_dir)
     existing = load_thread_dates(project_dir)
     existing.update(dates)
     p.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding='utf-8')
+    with _thread_dates_lock:
+        try:
+            _thread_dates_cache["key"] = str(p.resolve())
+            _thread_dates_cache["mtime"] = p.stat().st_mtime
+            _thread_dates_cache["data"] = dict(existing)
+        except Exception:
+            _thread_dates_cache["key"] = None
+
+
+def load_thread_dates_cached(project_dir: Path) -> dict:
+    """load_thread_dates + кэш в памяти (защита по mtime). Семантика та же, только быстрее."""
+    try:
+        p = thread_dates_path(project_dir)
+        key = str(p.resolve())
+    except Exception:
+        return load_thread_dates(project_dir)
+    with _thread_dates_lock:
+        if _thread_dates_cache.get("key") == key:
+            try:
+                if p.exists() and p.stat().st_mtime == _thread_dates_cache.get("mtime"):
+                    return _thread_dates_cache["data"]
+            except Exception:
+                pass
+    data = load_thread_dates(project_dir)
+    with _thread_dates_lock:
+        try:
+            _thread_dates_cache["key"] = key
+            _thread_dates_cache["mtime"] = p.stat().st_mtime if p.exists() else 0.0
+            _thread_dates_cache["data"] = data
+        except Exception:
+            pass
+    return data
 
 
 def evaluate_thread_keyword_match(thr_title, thread_date, keywords_config):
     if not keywords_config:
         return None
-    title_norm = normalize_title_for_match(thr_title)
-    if not title_norm:
+    if not normalize_title_for_match(thr_title):
         return None
     has_match = False
     should_check = False
     for entry in keywords_config:
         if isinstance(entry, dict):
-            kw = entry.get('keyword', '').strip()
             date_filter = entry.get('date', '').strip()
         else:
-            kw = str(entry).strip()
             date_filter = ''
-        if not kw:
-            continue
-        needle = normalize_title_for_match(kw)
-        if not needle or needle not in title_norm:
+        if not match_keyword(thr_title, entry):
             continue
         has_match = True
         if not date_filter or not thread_date:
@@ -3480,6 +4821,362 @@ def evaluate_thread_keyword_match(thr_title, thread_date, keywords_config):
     if not has_match:
         return None
     return 'check' if should_check else 'uncheck'
+
+class HistoryExcludeWindow(tk.Toplevel):
+    """Слова-исключения для «Истории» (v1.19): тема со словом в названии скрывается."""
+
+    def __init__(self, parent, app):
+        super().__init__(parent)
+        self.app = app
+        self.title("🚫 Слова-исключения «Истории»")
+        self.configure(bg=C["panel"])
+        self.geometry("520x500")
+        self.transient(parent)
+        self.grab_set()
+        self._entries = []
+
+        tk.Label(self, text="Темы с этими словами в названии\nне показываются в «Истории»:",
+                 bg=C["panel"], fg=C["sub"], font=("Segoe UI", 9),
+                 justify="left").pack(anchor="w", padx=10, pady=(8, 2))
+
+        scroll = tk.Frame(self, bg=C["panel"])
+        scroll.pack(fill="both", expand=True, padx=10, pady=5)
+        canvas = tk.Canvas(scroll, bg=C["panel"], highlightthickness=0)
+        vsb = ttk.Scrollbar(scroll, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+        frame = tk.Frame(canvas, bg=C["panel"])
+        self._frame = frame
+        win = canvas.create_window((0, 0), window=frame, anchor="nw")
+        frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(win, width=e.width))
+
+        try:
+            words = list(self.app.project.load_config().get("history_exclude_words", []) or [])
+        except Exception:
+            words = []
+        for w in words:
+            self._add_entry(str(w))
+        if not words:
+            self._add_entry("")
+
+        btns = tk.Frame(self, bg=C["panel"])
+        btns.pack(fill="x", padx=10, pady=5)
+        self.app._mk_btn(btns, "+ Слово", lambda: self._add_entry(""), C["green"], small=True).pack(side="left", padx=2)
+
+        bottom = tk.Frame(self, bg=C["panel"])
+        bottom.pack(fill="x", padx=10, pady=(0, 8))
+        self.app._mk_btn(bottom, "Сохранить", self._save, C["green"]).pack(side="left", padx=2)
+        self.app._mk_btn(bottom, "Отмена", self.destroy, C["red"]).pack(side="left", padx=2)
+
+    def _add_entry(self, value=""):
+        row = tk.Frame(self._frame, bg=C["panel"])
+        row.pack(fill="x", pady=1)
+        e = tk.Entry(row, bg=C["entry"], fg=C["text"], insertbackground=C["text"],
+                     relief="flat", font=("Segoe UI", 9),
+                     highlightthickness=1, highlightbackground=C["border"], highlightcolor=C["accent"])
+        e.pack(side="left", fill="x", expand=True, padx=(2, 4), ipady=2)
+        e.insert(0, value)
+        self.app._mk_btn(row, "✕", lambda r=row: self._remove(r), C["red"], small=True).pack(side="right", padx=2)
+        self._entries.append((row, e))
+
+    def _remove(self, row):
+        self._entries = [(r, e) for r, e in self._entries if r is not row]
+        try:
+            row.destroy()
+        except Exception:
+            pass
+
+    def _save(self):
+        words = [e.get().strip() for _, e in self._entries if e.get().strip()]
+        try:
+            self.app.project.save_config({"history_exclude_words": words})
+        except Exception:
+            pass
+        self.app._log(f"🚫 Слов-исключений «Истории»: {len(words)}", "ok")
+        self.destroy()
+
+
+class HistoryWindow(tk.Toplevel):
+    """Окно «История»: слева темы, справа журнал по датам (v1.17)."""
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.app = app
+        self.title("📜 История изменений тем")
+        self.configure(bg=C["panel"])
+        self.geometry("1000x640")
+        self.minsize(760, 480)
+        self._all = []
+        self._keys = []
+        self._cur = None
+        self._newest_first = tk.BooleanVar(value=True)
+
+        top = tk.Frame(self, bg=C["panel"])
+        top.pack(fill="x", padx=8, pady=(8, 4))
+        tk.Label(top, text="🔍", bg=C["panel"], fg=C["sub"],
+                 font=("Segoe UI", 10)).pack(side="left")
+        self.v_search = tk.StringVar()
+        self.v_search.trace_add("write", lambda *_: self._apply_filter())
+        tk.Entry(top, textvariable=self.v_search, width=34, bg=C["entry"],
+                 fg=C["text"], insertbackground=C["text"], relief="flat",
+                 font=("Segoe UI", 9), highlightthickness=1,
+                 highlightbackground=C["border"],
+                 highlightcolor=C["accent"]).pack(side="left", padx=4, ipady=3)
+        tk.Checkbutton(top, text="Сначала новые", variable=self._newest_first,
+                       command=self._render_right, bg=C["panel"], fg=C["sub"],
+                       activebackground=C["panel"], selectcolor=C["entry"],
+                       font=("Segoe UI", 9)).pack(side="left", padx=10)
+        # v1.19: разделение слоёв «Общие правила» / «Сервер».
+        try:
+            _hv = self.app.project.load_config().get("history_view", {}) or {}
+        except Exception:
+            _hv = {}
+        self.v_hmode = tk.StringVar(value=_hv.get("mode", "general"))
+        for _txt, _val in (("📜 Общие", "general"), ("🖥 Сервер", "server")):
+            tk.Radiobutton(top, text=_txt, value=_val, variable=self.v_hmode,
+                           command=self._on_hmode, bg=C["panel"], fg=C["text"],
+                           activebackground=C["panel"], selectcolor=C["entry"],
+                           font=("Segoe UI", 9)).pack(side="left", padx=2)
+        self.v_hserver = tk.StringVar(value=_hv.get("server", ""))
+        self.cb_hserver = ttk.Combobox(top, textvariable=self.v_hserver,
+                                       state="readonly", width=22,
+                                       font=("Segoe UI", 9))
+        self.cb_hserver.pack(side="left", padx=2)
+        self.cb_hserver.bind("<<ComboboxSelected>>", lambda *_: self._on_hmode())
+        app._mk_btn(top, "🚫 Исключения…", self._open_exclude, C["accent2"], small=True).pack(side="left", padx=6)
+        self.v_count = tk.StringVar(value="")
+        tk.Label(top, textvariable=self.v_count, bg=C["panel"], fg=C["sub"],
+                 font=("Segoe UI", 9)).pack(side="right")
+
+        paned = tk.PanedWindow(self, orient="horizontal", bg=C["border"],
+                               sashwidth=4, sashrelief="flat")
+        paned.pack(fill="both", expand=True, padx=8, pady=4)
+
+        left = tk.Frame(paned, bg=C["panel"])
+        paned.add(left, minsize=260)
+        sb = tk.Scrollbar(left, orient="vertical")
+        sb.pack(side="right", fill="y")
+        self.lb = tk.Listbox(left, bg=C["entry"], fg=C["text"],
+                             selectbackground=C["sel"], selectforeground="white",
+                             font=("Segoe UI", 9), relief="flat",
+                             highlightthickness=0, yscrollcommand=sb.set)
+        self.lb.pack(side="left", fill="both", expand=True)
+        sb.config(command=self.lb.yview)
+        self.lb.bind("<<ListboxSelect>>", lambda *_: self._on_select())
+
+        right = tk.Frame(paned, bg=C["panel"])
+        paned.add(right, minsize=400)
+        self.txt = scrolledtext.ScrolledText(right, bg=C["entry"], fg=C["text"],
+                                             font=("Consolas", 9), wrap="word",
+                                             relief="flat", highlightthickness=0)
+        self.txt.pack(fill="both", expand=True)
+        self.txt.tag_configure("h_date", foreground=C["accent"], font=("Consolas", 10, "bold"))
+        self.txt.tag_configure("post", foreground=C["accent2"], font=("Consolas", 9, "bold"))
+        self.txt.tag_configure("was", foreground=C["red"])
+        self.txt.tag_configure("became", foreground=C["green"])
+        self.txt.tag_configure("add", foreground=C["green"])
+        self.txt.tag_configure("dlt", foreground=C["orange"])
+        self.txt.tag_configure("ctx", foreground=C["sub"])
+        self.txt.tag_configure("title", foreground=C["text"], font=("Consolas", 11, "bold"))
+
+        bar = tk.Frame(self, bg=C["panel"])
+        bar.pack(fill="x", padx=8, pady=(0, 8))
+        app._mk_btn(bar, "🌐 Открыть тему", self._open_topic, C["accent2"]).pack(side="left", padx=2)
+        app._mk_btn(bar, "📋 Копировать", self._copy, C["accent2"]).pack(side="left", padx=2)
+        app._mk_btn(bar, "💾 Сохранить…", self._save, C["green"]).pack(side="left", padx=2)
+        app._mk_btn(bar, "🗑 Очистить тему", self._clear_topic, C["red"]).pack(side="left", padx=2)
+        app._mk_btn(bar, "🗑 Всю историю…", self._clear_all, C["red"]).pack(side="left", padx=2)
+        app._mk_btn(bar, "✖ Закрыть", self.destroy, C["panel"]).pack(side="right", padx=2)
+
+        self._reload()
+        if self._keys:
+            self.lb.selection_set(0)
+            self._on_select()
+
+    def _reload(self):
+        try:
+            with self.app._history_lock:
+                topics = dict((self.app._history or {}).get("topics", {}))
+        except Exception:
+            topics = {}
+        try:
+            self._exclude_words = list(self.app.project.load_config().get("history_exclude_words", []) or [])
+        except Exception:
+            self._exclude_words = []
+        rows = []
+        servers = set()
+        for key, t in topics.items():
+            t = t or {}
+            evts = t.get("events", [])
+            if not evts:
+                continue
+            scopes = list(t.get("scopes", []) or [])
+            for s in scopes:
+                if str(s).startswith("server:"):
+                    servers.add(str(s)[7:])
+            rows.append((key, t.get("title") or "(без названия)",
+                         t.get("updated") or "", len(evts),
+                         t.get("url") or "", scopes))
+        rows.sort(key=lambda r: r[2], reverse=True)
+        self._all = rows
+        try:
+            for sn in (self.app._server_root_nodes() or []):
+                if getattr(sn, "title", ""):
+                    servers.add(sn.title)
+        except Exception:
+            pass
+        srv_list = sorted(servers)
+        try:
+            self.cb_hserver["values"] = srv_list
+            if self.v_hserver.get() not in srv_list:
+                self.v_hserver.set(srv_list[0] if srv_list else "")
+        except Exception:
+            pass
+        self._apply_filter()
+
+    def _apply_filter(self):
+        q = (self.v_search.get() or "").strip().lower()
+        mode = (self.v_hmode.get() or "general") if hasattr(self, "v_hmode") else "general"
+        server = (self.v_hserver.get() or "") if hasattr(self, "v_hserver") else ""
+        excl = getattr(self, "_exclude_words", []) or []
+        self._keys = []
+        self.lb.delete(0, "end")
+        for key, title, updated, n, _url, scopes in self._all:
+            if is_excluded_by_words(title, "", excl):
+                continue
+            if not self._scope_visible(scopes, mode, server):
+                continue
+            if q and q not in title.lower():
+                continue
+            self._keys.append(key)
+            day = (updated or "")[:10]
+            self.lb.insert("end", f"{title}  ·  {n} {plural(n, 'событие', 'события', 'событий')}  ·  {day}")
+        self.v_count.set(f"Тем: {len(self._keys)}")
+        if self._keys:
+            if not self.lb.curselection():
+                self.lb.selection_set(0)
+            self._on_select()
+        else:
+            self._cur = None
+            self._render_right()
+
+    @staticmethod
+    def _scope_visible(scopes, mode, server):
+        """Видимость темы в выбранном слое (v1.19). Без привязки — видна везде."""
+        scopes = [s for s in (scopes or []) if s]
+        if not scopes:
+            return True
+        if mode == "general":
+            return "general" in scopes
+        want = f"server:{server}" if server else ""
+        return bool(want) and want in scopes
+
+    def _on_hmode(self):
+        try:
+            self.app.project.save_config({"history_view": {
+                "mode": self.v_hmode.get(), "server": self.v_hserver.get()}})
+        except Exception:
+            pass
+        self._apply_filter()
+
+    def _open_exclude(self):
+        win = HistoryExcludeWindow(self, self.app)
+        try:
+            self.wait_window(win)
+        except Exception:
+            pass
+        self._reload()
+
+    def _on_select(self):
+        sel = self.lb.curselection()
+        if not sel:
+            return
+        idx = sel[0]
+        if 0 <= idx < len(self._keys):
+            self._cur = self._keys[idx]
+            self._render_right()
+
+    def _cur_topic(self):
+        if not self._cur:
+            return None
+        try:
+            with self.app._history_lock:
+                return (self.app._history.get("topics", {}) or {}).get(self._cur)
+        except Exception:
+            return None
+
+    def _render_right(self):
+        t = self._cur_topic()
+        self.txt.config(state="normal")
+        self.txt.delete("1.0", "end")
+        if not t:
+            self.txt.insert("end", "Выберите тему слева.", "ctx")
+            self.txt.config(state="disabled")
+            return
+        title = t.get("title") or "(без названия)"
+        self.txt.insert("end", f"{title}\n", "title")
+        if t.get("url"):
+            self.txt.insert("end", f"{t['url']}\n", "ctx")
+        self.txt.insert("end", "\n")
+        for ev in history_sorted_events(t, self._newest_first.get()):
+            for text, tag in history_event_segments(ev):
+                self.txt.insert("end", text + "\n", tag)
+            self.txt.insert("end", "\n")
+        self.txt.config(state="disabled")
+
+    def _open_topic(self):
+        t = self._cur_topic()
+        url = (t or {}).get("url", "")
+        if url:
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+
+    def _copy(self):
+        try:
+            s = self.txt.get("1.0", "end-1c")
+            self.clipboard_clear()
+            self.clipboard_append(s)
+        except Exception:
+            pass
+
+    def _save(self):
+        t = self._cur_topic()
+        if not t:
+            return
+        p = filedialog.asksaveasfilename(
+            title="Сохранить историю темы", defaultextension=".txt",
+            filetypes=[("Text", "*.txt"), ("All", "*.*")],
+            initialfile=f"history_{safe_name(t.get('title', 'topic') or 'topic', 40)}.txt",
+        )
+        if not p:
+            return
+        try:
+            Path(p).write_text(self.txt.get("1.0", "end-1c"), encoding="utf-8")
+        except Exception as e:
+            messagebox.showerror("История", str(e))
+
+    def _clear_topic(self):
+        if not self._cur:
+            return
+        t = self._cur_topic()
+        name = (t or {}).get("title", "")
+        if not messagebox.askyesno("История", f"Удалить всю историю темы?\n«{name}»"):
+            return
+        self.app._clear_history_topic(self._cur)
+        self._cur = None
+        self._reload()
+
+    def _clear_all(self):
+        if not messagebox.askyesno("История", "Удалить ВСЮ историю изменений?"):
+            return
+        self.app._clear_history_all()
+        self._cur = None
+        self._reload()
+
 
 class RichLog(tk.Frame):
     def __init__(self, parent, **kw):
@@ -3884,6 +5581,7 @@ class KeywordConfigWindow(tk.Toplevel):
         self.grab_set()
         self._entries_node = []
         self._entries_thread = []
+        self._entries_exclude = []
 
         scroll = tk.Frame(self, bg=C["panel"])
         scroll.pack(fill="both", expand=True, padx=10, pady=5)
@@ -3906,7 +5604,10 @@ class KeywordConfigWindow(tk.Toplevel):
                  bg=C["panel"], fg=C["accent"], font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(5, 2))
         node_kw = cfg.get("auto_check_section_keywords", [])
         for kw in node_kw:
-            self._add_node_entry(kw)
+            if isinstance(kw, dict):
+                self._add_node_entry(kw.get("keyword", ""), kw.get("whole", False), kw.get("pos", "any"))
+            else:
+                self._add_node_entry(str(kw))
         if not node_kw:
             self._add_node_entry("")
         btns1 = tk.Frame(self._frame, bg=C["panel"])
@@ -3918,7 +5619,8 @@ class KeywordConfigWindow(tk.Toplevel):
         thread_kw = cfg.get("auto_check_thread_keywords", [])
         for item in thread_kw:
             if isinstance(item, dict):
-                self._add_thread_entry(item.get("keyword", ""), item.get("date", ""))
+                self._add_thread_entry(item.get("keyword", ""), item.get("date", ""),
+                                       item.get("whole", False), item.get("pos", "any"))
             else:
                 self._add_thread_entry(str(item), "")
         if not thread_kw:
@@ -3928,12 +5630,24 @@ class KeywordConfigWindow(tk.Toplevel):
         self.app._mk_btn(btns2, "+ Тема", lambda: self._add_thread_entry("", ""), C["green"], small=True).pack(
             side="left", padx=2)
 
+        tk.Label(self._frame, text="🚫 Исключения (есть в теме/разделе — не отмечать):",
+                 bg=C["panel"], fg=C["red"], font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(10, 2))
+        thread_ex = cfg.get("auto_check_thread_exclude", [])
+        for w in thread_ex:
+            self._add_exclude_entry(str(w) if not isinstance(w, dict) else w.get("word", ""))
+        if not thread_ex:
+            self._add_exclude_entry("")
+        btns3 = tk.Frame(self._frame, bg=C["panel"])
+        btns3.pack(anchor="w", pady=5)
+        self.app._mk_btn(btns3, "+ Исключение", lambda: self._add_exclude_entry(""), C["green"], small=True).pack(
+            side="left", padx=2)
+
         bottom = tk.Frame(self, bg=C["panel"])
         bottom.pack(fill="x", padx=10, pady=5)
         self.app._mk_btn(bottom, "Сохранить", self._save, C["green"]).pack(side="left", padx=2)
         self.app._mk_btn(bottom, "Отмена", self.destroy, C["red"]).pack(side="left", padx=2)
 
-    def _add_node_entry(self, value=""):
+    def _add_node_entry(self, value="", whole=False, pos="any"):
         row = tk.Frame(self._frame, bg=C["panel"])
         row.pack(fill="x", pady=1)
         e = tk.Entry(row, bg=C["entry"], fg=C["text"], insertbackground=C["text"],
@@ -3941,10 +5655,17 @@ class KeywordConfigWindow(tk.Toplevel):
                      highlightthickness=1, highlightbackground=C["border"], highlightcolor=C["accent"])
         e.pack(side="left", fill="x", expand=True, padx=(2, 4), ipady=2)
         e.insert(0, value)
+        wv = tk.BooleanVar(value=bool(whole))
+        tk.Checkbutton(row, text="целое", variable=wv, bg=C["panel"], fg=C["sub"],
+                       activebackground=C["panel"], selectcolor=C["entry"],
+                       font=("Segoe UI", 8)).pack(side="left", padx=2)
+        pv = tk.StringVar(value={"any": "везде", "start": "в начале", "end": "в конце"}.get(pos, "везде"))
+        ttk.Combobox(row, textvariable=pv, values=["везде", "в начале", "в конце"],
+                     state="readonly", width=9, font=("Segoe UI", 8)).pack(side="left", padx=2)
         self.app._mk_btn(row, "✕", lambda r=row, en=e: self._remove_entry(r, en, self._entries_node), C["red"], small=True).pack(side="right", padx=2)
-        self._entries_node.append((row, e))
+        self._entries_node.append((row, e, wv, pv))
 
-    def _add_thread_entry(self, value="", date=""):
+    def _add_thread_entry(self, value="", date="", whole=False, pos="any"):
         row = tk.Frame(self._frame, bg=C["panel"])
         row.pack(fill="x", pady=1)
         e = tk.Entry(row, bg=C["entry"], fg=C["text"], insertbackground=C["text"],
@@ -3960,9 +5681,27 @@ class KeywordConfigWindow(tk.Toplevel):
         d.insert(0, date)
         tk.Label(row, text="(дд.мм.гггг)", bg=C["panel"], fg=C["sub"], font=("Segoe UI", 8)).pack(side="left",
                                                                                                   padx=(0, 4))
+        wv = tk.BooleanVar(value=bool(whole))
+        tk.Checkbutton(row, text="целое", variable=wv, bg=C["panel"], fg=C["sub"],
+                       activebackground=C["panel"], selectcolor=C["entry"],
+                       font=("Segoe UI", 8)).pack(side="left", padx=2)
+        pv = tk.StringVar(value={"any": "везде", "start": "в начале", "end": "в конце"}.get(pos, "везде"))
+        ttk.Combobox(row, textvariable=pv, values=["везде", "в начале", "в конце"],
+                     state="readonly", width=9, font=("Segoe UI", 8)).pack(side="left", padx=2)
         self.app._mk_btn(row, "✕", lambda r=row, en=e: self._remove_entry(r, en, self._entries_thread), C["red"],
                          small=True).pack(side="right", padx=2)
-        self._entries_thread.append((row, e, d))
+        self._entries_thread.append((row, e, d, wv, pv))
+
+    def _add_exclude_entry(self, value=""):
+        row = tk.Frame(self._frame, bg=C["panel"])
+        row.pack(fill="x", pady=1)
+        e = tk.Entry(row, bg=C["entry"], fg=C["text"], insertbackground=C["text"],
+                     relief="flat", font=("Segoe UI", 9),
+                     highlightthickness=1, highlightbackground=C["border"], highlightcolor=C["red"])
+        e.pack(side="left", fill="x", expand=True, padx=(2, 4), ipady=2)
+        e.insert(0, value)
+        self.app._mk_btn(row, "✕", lambda r=row, en=e: self._remove_entry(r, en, self._entries_exclude), C["red"], small=True).pack(side="right", padx=2)
+        self._entries_exclude.append((row, e))
 
     def _remove_entry(self, row, entry, lst):
         for i, item in enumerate(lst):
@@ -3972,19 +5711,29 @@ class KeywordConfigWindow(tk.Toplevel):
         row.destroy()
 
     def _save(self):
-        node_kw = [e.get().strip() for _, e in self._entries_node if e.get().strip()]
+        _pos_back = {"в начале": "start", "в конце": "end"}
+        node_kw = []
+        for item in self._entries_node:
+            _kw = item[1].get().strip()
+            if _kw:
+                node_kw.append({"keyword": _kw, "whole": bool(item[2].get()),
+                                "pos": _pos_back.get(item[3].get(), "any")})
         thread_kw = []
         for item in self._entries_thread:
             kw_entry = item[1]
             date_entry = item[2]
             kw = kw_entry.get().strip()
             if kw:
-                thread_kw.append({"keyword": kw, "date": date_entry.get().strip()})
+                thread_kw.append({"keyword": kw, "date": date_entry.get().strip(),
+                                  "whole": bool(item[3].get()),
+                                  "pos": _pos_back.get(item[4].get(), "any")})
+        thread_ex = [e.get().strip() for _, e in self._entries_exclude if e.get().strip()]
         self.app.project.save_config({
             "auto_check_section_keywords": node_kw,
             "auto_check_thread_keywords": thread_kw,
+            "auto_check_thread_exclude": thread_ex,
         })
-        set_autocheck_keywords(node_kw, thread_kw)
+        set_autocheck_keywords(node_kw, thread_kw, thread_ex)
         self.app._log("Ключевые слова автоотметки сохранены и применены", "ok")
         self.destroy()
 
@@ -4192,12 +5941,15 @@ class ParticipationWindow(tk.Toplevel):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Форум-Менеджер")
+        self.title(f"Форум-Менеджер {PARSER_VERSION}")
         self.geometry("1400x900")
         self.minsize(1000, 640)
         self.configure(bg=C["bg"])
 
         self.http = HttpClient()
+        self.http.cookie_harvester = self._harvest_browser_cookies
+        self.http.cookies_persister = self._persist_harvested_cookies
+        self.http.browser_ensurer = self._ensure_fetch_browser
         self.executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
         self.project = Project(FORUM_BASE_URL)
         self.nodes = []
@@ -4208,11 +5960,15 @@ class App(tk.Tk):
         self._running = False
         self._logged_in = False
         self._abort = threading.Event()
+        self.http.abort_event = self._abort  # v1.21: «Стоп» прерывает и паузы рубильника
         self._checks = {}
         self._nmap = {}
         self._depths = {}
         self._thread_map = {}
         self._thread_checks = {}
+        self._history = {"topics": {}}
+        self._history_lock = threading.Lock()
+        self._history_loaded_for = None
         self._sel_url = None
         self._show_debug = tk.BooleanVar(value=True)
         self._emitter = None
@@ -4221,9 +5977,27 @@ class App(tk.Tk):
         self._topic_filters = cfg.get("topic_filters", [])
         self._abbreviations = cfg.get("abbreviations", {})
         self._telegraph = cfg.get("telegraph_replacements", {})
+        self.v_fast = tk.BooleanVar(value=bool(cfg.get("fast_path_enabled", FAST_PATH_ENABLED_DEFAULT)))
+        self.v_fast.trace_add("write", lambda *_: self._on_fast_toggle())
+        self.http.fast_enabled = self.v_fast.get()
+        self.v_stealth = tk.BooleanVar(value=bool(cfg.get("stealth_mode", False)))
+        self.v_stealth.trace_add("write", lambda *_: self._on_stealth_toggle())
+        self._apply_stealth(self.v_stealth.get(), silent=True)
         node_kw = cfg.get("auto_check_section_keywords", [])
         thread_kw = cfg.get("auto_check_thread_keywords", [])
-        set_autocheck_keywords(node_kw, thread_kw)
+        thread_ex = cfg.get("auto_check_thread_exclude", [])
+        set_autocheck_keywords(node_kw, thread_kw, thread_ex)
+        try:
+            self._workers_n = max(1, min(64, int(cfg.get("workers", MAX_WORKERS))))
+        except Exception:
+            self._workers_n = MAX_WORKERS
+        if self._workers_n != MAX_WORKERS:
+            try:
+                _old_ex = self.executor
+                self.executor = ThreadPoolExecutor(max_workers=self._workers_n)
+                _old_ex.shutdown(wait=False)
+            except Exception:
+                pass
         if not cfg.get("abbreviations"):
             self.project.save_config({"abbreviations": {}})
         if not cfg.get("telegraph_replacements"):
@@ -4234,10 +6008,16 @@ class App(tk.Tk):
             self.project.save_config({"auto_check_thread_keywords": ["ОБРАЩЕНИЕ О ДАЧЕ РАЗЪЯСНЕНИЙ"]})
         if not cfg.get("topic_filters"):
             self.project.save_config({"topic_filters": []})
+        if "fast_path_enabled" not in cfg:
+            self.project.save_config({"fast_path_enabled": FAST_PATH_ENABLED_DEFAULT})
+        if "stealth_mode" not in cfg:
+            self.project.save_config({"stealth_mode": False})
         self._build()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._update_login_indicator()
         self.after(300, self._auto_load_state)
+        self.after(2000, self._poll_transport_stats)
+        self.after(600, self._update_history_badge)
 
     def _build(self):
         self._build_topbar()
@@ -4329,10 +6109,13 @@ class App(tk.Tk):
                                  font=("Segoe UI", 9, "bold"))
         self.lbl_auth.pack(side="left", padx=(0, 14))
 
-        tk.Label(bar, text="🌐 Режим: только браузер", bg=C["panel"], fg=C["sub"],
-                 font=("Segoe UI", 8, "italic")).pack(side="left", padx=(0, 14))
+        self.v_transport = tk.StringVar(value="⚡ cookies")
+        self.lbl_transport = tk.Label(bar, textvariable=self.v_transport, bg=C["panel"], fg=C["green"],
+                                      font=("Segoe UI", 8, "bold"))
+        self.lbl_transport.pack(side="left", padx=(0, 14))
 
         self.btn_login = self._mk_btn(bar, "🔑 Войти", self._do_login, C["orange"])
+        self.btn_check_cookies = self._mk_btn(bar, "🍪 Проверить cookies", self._check_fast_session_click, C["green"])
         self.btn_scan = self._mk_btn(bar, "🔍 Сканировать", self._do_scan, C["accent"])
         self.btn_stop = self._mk_btn(bar, "⏹ Стоп", self._do_stop, C["red"])
         self.btn_load = self._mk_btn(bar, "💾 Загрузить", self._do_load, C["accent2"])
@@ -4343,7 +6126,7 @@ class App(tk.Tk):
         self.btn_topic_filter = self._mk_btn(bar, "🔍 Фильтр тем", self._open_topic_filter, C["accent2"])
         self.btn_topic_filter.pack(side="left", padx=3)
 
-        for b in (self.btn_login, self.btn_scan, self.btn_stop, self.btn_load):
+        for b in (self.btn_login, self.btn_check_cookies, self.btn_scan, self.btn_stop, self.btn_load):
             b.pack(side="left", padx=3)
         self.btn_stop.config(state="disabled")
 
@@ -4360,8 +6143,11 @@ class App(tk.Tk):
                                           self._do_scan_deep, C["orange"])
         self.btn_generate = self._mk_btn(bar2, "🚀 Сформировать документы",
                                          self._do_generate, C["green"])
+        self.btn_history = self._mk_btn(bar2, "📜 История",
+                                        self._show_history, C["accent2"])
         for b in (self.btn_mark_general, self.btn_mark_server,
-                  self.btn_unmark, self.btn_scan_deep, self.btn_generate):
+                  self.btn_unmark, self.btn_scan_deep, self.btn_generate,
+                  self.btn_history):
             b.pack(side="left", padx=3)
 
         self.v_marks_info = tk.StringVar(value="📜 Общие: 0   🖥 Сервер: 0")
@@ -4482,10 +6268,18 @@ class App(tk.Tk):
         tk.Label(cfg_f, text="Потоков:", bg=C["panel"], fg=C["sub"], font=("Segoe UI", 8)).grid(row=3, column=0,
                                                                                                 sticky="w", padx=8,
                                                                                                 pady=4)
-        self.v_workers = tk.IntVar(value=MAX_WORKERS)
+        self.v_workers = tk.IntVar(value=getattr(self, "_workers_n", MAX_WORKERS))
         tk.Spinbox(cfg_f, from_=1, to=64, textvariable=self.v_workers, width=5,
                    bg=C["entry"], fg=C["text"], relief="flat").grid(row=3, column=1, sticky="w")
         self._mk_btn(cfg_f, "Применить", self._apply_workers, C["accent2"], small=True).grid(row=3, column=2, padx=6)
+        tk.Checkbutton(cfg_f, text="⚡ Быстрый режим (cookies, браузер — запасной)", variable=self.v_fast,
+                       bg=C["panel"], fg=C["text"], activebackground=C["panel"],
+                       selectcolor=C["entry"], font=("Segoe UI", 8)).grid(row=4, column=0, columnspan=3, sticky="w",
+                                                                          padx=8, pady=2)
+        tk.Checkbutton(cfg_f, text="🐢 Тихий режим (паузы ×3, после бана)", variable=self.v_stealth,
+                       bg=C["panel"], fg=C["text"], activebackground=C["panel"],
+                       selectcolor=C["entry"], font=("Segoe UI", 8)).grid(row=5, column=0, columnspan=3, sticky="w",
+                                                                          padx=8, pady=2)
 
         disp_f = tk.LabelFrame(right, text="  📊  Диспетчер процессов  ", bg=C["panel"], fg=C["green"],
                                font=("Segoe UI", 9, "bold"), bd=1, relief="groove")
@@ -4550,6 +6344,100 @@ class App(tk.Tk):
         self.dispatcher.clear_all()
         self.dispatcher.attach(self._emitter)
         return self._emitter.process_started(label, total)
+
+    def _on_fast_toggle(self):
+        try:
+            val = bool(self.v_fast.get())
+        except Exception:
+            return
+        self.http.fast_enabled = val
+        try:
+            self.project.save_config({"fast_path_enabled": val})
+        except Exception:
+            pass
+        self._update_transport_indicator()
+        self._log(f"⚡ Быстрый режим {'ВКЛ (cookies + браузер-запасной)' if val else 'ВЫКЛ (только браузер)'}",
+                  "info")
+
+    def _on_stealth_toggle(self):
+        try:
+            val = bool(self.v_stealth.get())
+        except Exception:
+            return
+        self._apply_stealth(val)
+        try:
+            self.project.save_config({"stealth_mode": val})
+        except Exception:
+            pass
+
+    def _apply_stealth(self, val: bool, silent: bool = False):
+        """v1.21: 🐢 Тихий режим — все паузы ×3 (и браузерные, и быстрые)."""
+        mult = 3.0 if val else 1.0
+        self.http.stealth_mult = mult
+        try:
+            self.http._rate.pace_mult = mult
+        except Exception:
+            pass
+        if not silent:
+            self._log(f"🐢 Тихий режим {'ВКЛ: паузы ×3 — медленно, но незаметно' if val else 'ВЫКЛ: обычный темп'}",
+                      "info")
+
+    def _update_transport_indicator(self):
+        try:
+            st = self.http.get_stats()
+        except Exception:
+            return
+        if not st.get("enabled"):
+            self.v_transport.set("🌐 только браузер")
+            self.lbl_transport.config(fg=C["yellow"])
+            return
+        bleft = st.get("breaker_left", 0)
+        if bleft > 0:
+            mm, ss = divmod(int(bleft), 60)
+            self.v_transport.set(f"⏸ форум отдыхает {mm}:{ss:02d} · ⚡{st['fast']} 🌐{st['browser']}")
+            self.lbl_transport.config(fg=C["yellow"])
+            return
+        left = st.get("browser_only_left", 0)
+        if left > 0:
+            mm, ss = divmod(int(left), 60)
+            self.v_transport.set(f"🌐 браузер-only {mm}:{ss:02d} · ⚡{st['fast']} 🌐{st['browser']}")
+            self.lbl_transport.config(fg=C["yellow"])
+        else:
+            self.v_transport.set(f"⚡cookies {st['fast']} · 🌐{st['browser']} · ⛔{st['fast_blocks']}")
+            self.lbl_transport.config(fg=C["green"])
+
+    def _poll_transport_stats(self):
+        try:
+            self._update_transport_indicator()
+        except Exception:
+            pass
+        try:
+            self.after(2000, self._poll_transport_stats)
+        except Exception:
+            pass
+
+    def _persist_harvested_cookies(self, cookies):
+        """v1.19: свежие cookies из браузера сразу пишем в файл (не только в память)."""
+        try:
+            if cookies:
+                self.project.save_cookies(list(cookies))
+                get_logger().debug(f"harvest: {len(cookies)} cookies сохранены в файл")
+        except Exception:
+            pass
+
+    def _harvest_browser_cookies(self):
+        if not self._fetch_browser_lock.acquire(blocking=False):
+            return None
+        try:
+            browser = self._fetch_browser
+            if not browser or not browser.driver:
+                return None
+            try:
+                return browser.export_cookies()
+            except Exception:
+                return None
+        finally:
+            self._fetch_browser_lock.release()
 
     def _update_login_indicator(self):
         has_cookies = self.project.cookies.exists()
@@ -5032,7 +6920,7 @@ class App(tk.Tk):
 
         # ── Темы ───────────────────────────────────────────────────
         autochecked_threads = []
-        thread_dates = load_thread_dates(self.project.dir)
+        thread_dates = load_thread_dates_cached(self.project.dir)
         for thr_iid, var in self._thread_checks.items():
             thr = self._thread_map.get(thr_iid)
             if thr is None:
@@ -5160,51 +7048,7 @@ class App(tk.Tk):
 
         return lines
 
-    def _show_threads_diff_report(self, disappeared: list, new_found: list):
-        def _do():
-            top = tk.Toplevel(self)
-            top.title("⚠ Изменения в темах после Этапа 2")
-            top.configure(bg=C["panel"])
-            top.geometry("680x480")
-            txt = scrolledtext.ScrolledText(top, bg=C["entry"], fg=C["text"], font=("Consolas", 9))
-            txt.pack(fill="both", expand=True, padx=8, pady=8)
 
-            if disappeared:
-                txt.insert("end", f"⚠ ПРОПАЛИ ранее выбранные темы ({len(disappeared)}):\n")
-                txt.insert("end", "   (были отмечены галочкой, но не найдены при повторном сканировании)\n\n")
-                for node_title, thread_title in disappeared:
-                    txt.insert("end", f"  • [{node_title}] {thread_title}\n")
-                txt.insert("end", "\n")
-
-            if new_found:
-                txt.insert("end", f"🆕 НОВЫЕ темы найдены ({len(new_found)}):\n")
-                txt.insert("end", "   (добавлены БЕЗ автоматического выбора)\n\n")
-                for node_title, thread_title in new_found:
-                    txt.insert("end", f"  • [{node_title}] {thread_title}\n")
-
-            txt.config(state="disabled")
-            self._mk_btn(top, "Закрыть", top.destroy, C["accent"]).pack(pady=6)
-
-        self.after(0, _do)
-
-    def _show_state_report(self, diff_lines: list, stage_label: str):
-        def _do():
-            top = tk.Toplevel(self)
-            top.title(f"Отчёт: «Выбор» / «Сервер» / «Общие правила» — {stage_label}")
-            top.configure(bg=C["panel"])
-            top.geometry("620x400")
-            txt = scrolledtext.ScrolledText(top, bg=C["entry"], fg=C["text"], font=("Consolas", 9))
-            txt.pack(fill="both", expand=True, padx=8, pady=8)
-            if diff_lines:
-                txt.insert("end", f"⚠ Обнаружены изменения ({stage_label}):\n\n")
-                for ln in diff_lines:
-                    txt.insert("end", ln + "\n")
-            else:
-                txt.insert("end", "✅ Все чекбоксы «Выбор», пометки «Сервер» и «Общие правила»\n"
-                                   "корректны, изменений нет — состояние сохранено.")
-            txt.config(state="disabled")
-            self._mk_btn(top, "Закрыть", top.destroy, C["accent"]).pack(pady=6)
-        self.after(0, _do)
 
     def _save_state(self):
         """Сохраняет текущее состояние галочек, пометок и выбора тем."""
@@ -5362,16 +7206,25 @@ class App(tk.Tk):
             messagebox.showinfo("Занято", "Дождитесь завершения текущей операции.")
             return
         n = max(1, min(64, self.v_workers.get()))
+        try:
+            self.project.save_config({"workers": n})
+        except Exception:
+            pass
         old = self.executor
         self.executor = ThreadPoolExecutor(max_workers=n)
         old.shutdown(wait=False)
         self._log(
             f"⚙ Потоков установлено: {n} "
-            f"(на скорость СКАНИРОВАНИЯ не влияет — используется одно окно "
-            f"браузера, все запросы к нему строго последовательны; "
-            f"потоки полезны только для параллельной обработки данных вне браузера)",
+            f"(быстрый путь ⚡cookies реально параллелится; глобальный рейт-лимитер "
+            f"держит безопасный темп — сайт не перегружается; "
+            f"запросы через браузер 🌐 всегда строго последовательны)",
             "info"
         )
+        if n > SAFE_WORKERS_FAST:
+            self._log(
+                f"⚠ Потоков больше {SAFE_WORKERS_FAST}: риск бана резко растёт. "
+                f"Снизьте до 1–{SAFE_WORKERS_FAST} или включите 🐢 Тихий режим.", "warn"
+            )
 
     def _ensure_cookies_loaded(self) -> bool:
         if self.http.get_cookies():
@@ -5382,6 +7235,66 @@ class App(tk.Tk):
             self._log(f"🔑 Загружено cookies из файла: {len(cookies)}", "info")
             return True
         return False
+
+    def _verify_fast_session_async(self, reason=""):
+        """Проверка быстрого пути в фоне с вердиктом в лог (v1.19)."""
+        def worker():
+            try:
+                res = self.http.verify_fast_session()
+            except Exception as e:
+                try:
+                    n = len(self.http.get_cookies())
+                except Exception:
+                    n = 0
+                res = {"ok": False, "cause": f"error:{type(e).__name__}", "kb": 0,
+                       "marker": "", "cookies_n": n, "xf_user": False}
+            self.after(0, lambda: self._report_fast_verify(res, reason))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _check_fast_session_click(self):
+        if self._running:
+            messagebox.showinfo("Занято", "Дождитесь завершения текущей операции.")
+            return
+        if not self.http.get_cookies():
+            try:
+                cks = self.project.load_cookies()
+            except Exception:
+                cks = []
+            if cks:
+                self.http.set_cookies(cks)
+        if not self.http.get_cookies():
+            messagebox.showwarning("Нет cookies", "Сначала нажмите «🔑 Войти».")
+            return
+        self._log("🍪 Проверка быстрого пути: запрашиваю главную форума через ⚡cookies…", "info")
+        self._verify_fast_session_async("ручная проверка")
+
+    def _report_fast_verify(self, res, reason=""):
+        res = res or {}
+        where = f" ({reason})" if reason else ""
+        n = res.get("cookies_n", 0)
+        xu = "есть" if res.get("xf_user") else "НЕТ"
+        cause = res.get("cause", "")
+        if res.get("ok"):
+            self._log(f"✅ Быстрый путь РАБОТАЕТ{where}: форум узнал вас по cookies "
+                      f"(маркер: {res.get('marker')}, cookies: {n}, xf_user: {xu}). "
+                      f"Запросы пойдут через ⚡.", "ok")
+        elif cause == "no_cookies":
+            self._log(f"❌ Нет cookies для проверки{where}: нажмите «🔑 Войти».", "err")
+        elif cause in ("login_form", "redirect_login"):
+            _a = res.get("analysis") if isinstance(res.get("analysis"), dict) else {}
+            _extra = ""
+            if _a:
+                _extra = (f" Разбор страницы: заголовок «{_a.get('title', '?')}», "
+                          f"маркеров входа: {len(_a.get('markers', []))} "
+                          f"(сильных: {len(_a.get('strong', []))}), "
+                          f"контент: {'есть' if _a.get('content_ok') else 'нет'}.")
+            self._log(f"❌ Форум НЕ узнал сессию{where} ({cause}, cookies: {n}, xf_user: {xu}).{_extra} "
+                      f"Быстрый путь будет падать в браузер. Нажмите «🔑 Войти» заново "
+                      f"(с галочкой «Запомнить меня»).", "err")
+        else:
+            self._log(f"⚠ Быстрый путь под вопросом{where}: {cause} "
+                      f"(cookies: {n}, xf_user: {xu}). Если форум требует вход — "
+                      f"нажмите «🔑 Войти» заново.", "warn")
 
     def _do_login(self):
         if self._running:
@@ -5508,6 +7421,10 @@ class App(tk.Tk):
                     em.step_state(s_export, "running")
                 self.project.save_cookies(cookies)
                 self.http.set_cookies(cookies)
+                if not has_xf_session_cookie(cookies):
+                    self._log("⚠ В cookies НЕТ xf_user — похоже, вход был БЕЗ галочки «Запомнить меня»: "
+                              "быстрый путь (⚡cookies) перестанет работать после закрытия браузера. "
+                              "Войдите заново с галочкой.", "warn")
                 self._logged_in = logged
                 self._update_login_indicator()
                 names = sorted(set(c.get("name", "") for c in cookies))
@@ -5532,6 +7449,8 @@ class App(tk.Tk):
                 self._log("🌐 Браузер оставлен активным как фолбэк для обхода антибота при сканировании", "info")
                 if em and s_fb:
                     em.step_state(s_fb, "done")
+                # v1.19: сразу проверяем, узнаёт ли форум cookies быстрым путём.
+                self._verify_fast_session_async("после входа")
                 if em:
                     em.process_finished("done", time.monotonic() - t0)
             except Exception as e:
@@ -5580,10 +7499,10 @@ class App(tk.Tk):
             if self._fetch_browser and self._fetch_browser.driver:
                 return True
         cookies = self.http.get_cookies() or self.project.load_cookies()
-        if not cookies:
-            cb("⚠ Нет сохранённых cookies — фолбэк-браузер недоступен. "
-               "Нажмите «🔑 Войти», чтобы авторизоваться хотя бы раз.", "warn")
-            return False
+        if cookies:
+            self.http.set_cookies(cookies)
+        else:
+            cb("⚠ Сохранённых cookies нет — пробую запустить браузер на сохранённом профиле...", "warn")
         cb("🌐 Запускаю фоновый браузер для обхода антибота "
            "(используются сохранённые cookies, повторный логин не нужен)...", "info")
         s_start = None
@@ -5624,6 +7543,30 @@ class App(tk.Tk):
             browser.driver.get(FORUM_BASE_URL)
             time.sleep(2)
             cb(f"  🍪 В браузер применено cookies: {applied}/{len(cookies)}", "debug")
+            try:
+                _logged = browser.check_logged_in(FORUM_BASE_URL, log_cb=lambda s: None)
+            except Exception:
+                _logged = False
+            if _logged:
+                try:
+                    _fresh = browser.export_cookies()
+                except Exception:
+                    _fresh = []
+                if _fresh:
+                    self.http.set_cookies(_fresh)
+                    self._logged_in = True
+                    try:
+                        self.project.save_cookies(_fresh)
+                    except Exception:
+                        pass
+                    cb(f"  ✅ Сессия в браузере активна, cookies обновлены ({len(_fresh)})", "ok")
+                    try:
+                        self._update_login_indicator()
+                    except Exception:
+                        pass
+            else:
+                cb("  ⚠ В браузере нет активной сессии — для закрытых разделов нужен ручной вход («🔑 Войти»)",
+                   "warn")
             if em and s_nav:
                 em.step_state(s_nav, "done", f"{applied}/{len(cookies)} cookies")
         except Exception as e:
@@ -5658,19 +7601,29 @@ class App(tk.Tk):
             pid = self._start_emitter("🔍 Этап 1: Сканирование")
             em = self._emitter
             try:
-                s_fb = em.step_added(pid, "Проверка фолбэк-браузера", "🌐")
-                em.step_state(s_fb, "running")
-                if not self._ensure_fetch_browser(emitter=em, parent_id=s_fb):
-                    em.step_state(s_fb, "error", "Браузер недоступен")
-                    em.process_finished("error", time.monotonic() - t0)
-                    self._log(
-                        "❌ Сканирование отменено: браузер недоступен. "
-                        "Сканирование работает ТОЛЬКО через браузер — "
-                        "сначала нажмите «🔑 Войти».", "err"
-                    )
-                    self._status("❌ Нет браузера — сканирование отменено")
-                    return
-                em.step_state(s_fb, "done")
+                self.http.fast_enabled = self.v_fast.get()
+                self.http.ensure_real_ua()
+                s_tr = em.step_added(pid, "Выбор транспорта", "⚡")
+                em.step_state(s_tr, "running")
+                if self.http.fast_enabled and self.http.get_cookies():
+                    em.step_state(s_tr, "done", "⚡ cookies, браузер — по требованию")
+                    self._log("⚡ Быстрый режим: запросы через cookies, браузер поднимется только при блокировках",
+                              "info")
+                else:
+                    s_fb = em.step_added(s_tr, "Проверка фолбэк-браузера", "🌐")
+                    em.step_state(s_fb, "running")
+                    if not self._ensure_fetch_browser(emitter=em, parent_id=s_fb):
+                        em.step_state(s_fb, "error", "Браузер недоступен")
+                        em.step_state(s_tr, "error", "Нет транспорта")
+                        em.process_finished("error", time.monotonic() - t0)
+                        self._log(
+                            "❌ Сканирование отменено: нет cookies для быстрого пути, браузер недоступен. "
+                            "Сначала нажмите «🔑 Войти».", "err"
+                        )
+                        self._status("❌ Нет транспорта — сканирование отменено")
+                        return
+                    em.step_state(s_fb, "done")
+                    em.step_state(s_tr, "done", "🌐 только браузер")
                 s_snap = em.step_added(pid, "Снимок состояния ДО", "📸")
                 em.step_state(s_snap, "running")
                 before_snapshot = self._snapshot_state()
@@ -5715,14 +7668,14 @@ class App(tk.Tk):
                     self._save_state()
                     after_snapshot = self._snapshot_state()
                     diff = self._diff_state(before_snapshot, after_snapshot)
-                    self._show_state_report(diff, "Этап 1")
+                    self._log_state_diff(diff, "Этап 1")
                     if em:
                         em.step_state(s_build, "done")
                         em.process_finished("done", time.monotonic() - t0)
 
                 self.after(0, _after_build)
                 self._status(
-                    f"✅ Этап 1 завершён. Разделов: {cnt}. "
+                    f"✅ Этап 1 завершён: {cnt} {plural(cnt, 'раздел', 'раздела', 'разделов')}. "
                     f"Пометьте нужные → «Этап 2»."
                 )
             except Exception as e:
@@ -6083,21 +8036,25 @@ class App(tk.Tk):
                 "В выбранных серверах нет разделов с отметкой «Выбор»."
             )
             return
-        if not self._ensure_fetch_browser():
+        self.http.fast_enabled = self.v_fast.get()
+        if not (self.http.fast_enabled and self.http.get_cookies()) and not self._ensure_fetch_browser():
             messagebox.showerror(
-                "Нет браузера",
-                "Сканирование работает только через браузер.\nСначала нажмите «🔑 Войти»."
+                "Нет транспорта",
+                "Нет cookies для быстрого пути и браузер недоступен.\nСначала нажмите «🔑 Войти»."
             )
             return
         self._abort.clear()
         self._set_busy(True)
         self._log("=" * 50, "head")
-        self._log(f"🔍 ЭТАП 2: Глубокое сканирование {len(selected)} разделов", "head")
+        self._log(f"🔍 ЭТАП 2: Глубокое сканирование {len(selected)} {plural(len(selected), 'раздел', 'раздела', 'разделов')}", "head")
 
         def worker():
             t0 = time.monotonic()
-            pid = self._start_emitter(f"🔍 Этап 2: Глубокое сканирование ({len(selected)} разделов)", len(selected))
+            _sel_total = sum(len(flatten_nodes([n])) for n in selected)
+            pid = self._start_emitter(f"🔍 Этап 2: Глубокое сканирование ({len(selected)} {plural(len(selected), 'раздел', 'раздела', 'разделов')})", _sel_total)
             em = self._emitter
+            self.http.fast_enabled = self.v_fast.get()
+            self.http.ensure_real_ua()
             try:
                 s_snap = em.step_added(pid, "Снимок состояния ДО", "📸")
                 em.step_state(s_snap, "running")
@@ -6136,16 +8093,17 @@ class App(tk.Tk):
                     self._save_state()
                     after_snapshot = self._snapshot_state()
                     diff = self._diff_state(before_snapshot, after_snapshot)
-                    self._show_state_report(diff, "Этап 2")
-                    if disappeared or new_found:
-                        self._show_threads_diff_report(disappeared, new_found)
+                    self._log_state_diff(diff, "Этап 2")
+                    self._record_scan_history(disappeared, new_found)
+                    self._save_history()
+                    self.after(0, self._update_history_badge)
                     if em:
                         em.step_state(s_build, "done")
                         em.process_finished("done", time.monotonic() - t0)
 
                 self.after(0, _after_build)
                 total = sum(len(flatten_nodes([n])) for n in selected)
-                self._status(f"✅ Этап 2 завершён. Узлов просканировано: {total}")
+                self._status(f"✅ Этап 2 завершён. Просканировано: {total} {plural(total, 'узел', 'узла', 'узлов')}")
             except Exception as e:
                 self._log(f"❌ {e}", "err")
                 get_logger().exception(e)
@@ -6179,7 +8137,7 @@ class App(tk.Tk):
 
     def _fetch_image_bytes(self, url: str, proxy_url: str = ""):
         t0 = time.monotonic()
-        deadline = min(IMAGE_DOWNLOAD_DEADLINE, 25)
+        deadline = min(IMAGE_DOWNLOAD_DEADLINE, 12)
         cookies = self.http.get_cookies()
 
         def time_left():
@@ -6204,28 +8162,39 @@ class App(tk.Tk):
 
         if not is_forum_host:
             data, m = attempt("requests_direct",
-                              lambda b: _download_image_bytes(url, cookies=cookies, timeout=b), 10)
+                              lambda b: _download_image_bytes(url, cookies=cookies, timeout=b), 6)
             if data:
                 return data, m
 
             data, m = attempt("curl",
-                              lambda b: _download_image_curl(url, timeout=b), 10)
+                              lambda b: _download_image_curl(url, timeout=b), 5)
             if data:
                 return data, m
 
             data, m = attempt("requests_firefox_ua",
-                              lambda b: _download_image_bytes(url, cookies=cookies, timeout=b, ua_variant=1), 8)
+                              lambda b: _download_image_bytes(url, cookies=cookies, timeout=b, ua_variant=1), 4)
             if data:
                 return data, m
 
             data, m = attempt("requests_mobile_ua",
-                              lambda b: _download_image_bytes(url, cookies=cookies, timeout=b, ua_variant=2), 8)
+                              lambda b: _download_image_bytes(url, cookies=cookies, timeout=b, ua_variant=2), 4)
             if data:
                 return data, m
 
+        if is_forum_host and self.http.fast_enabled:
+            data, m = attempt("cookies_session",
+                              lambda b: self.http.download_bytes(url, timeout=b), 6)
+            if data:
+                return data, m
+            if proxy_url:
+                data, m = attempt("cookies_session_proxy",
+                                  lambda b: self.http.download_bytes(proxy_url, timeout=b), 5)
+                if data:
+                    return data, m
+
         if proxy_url:
             data, m = attempt("forum_proxy",
-                              lambda b: _download_image_via_proxy(proxy_url, cookies=cookies, timeout=b), 12)
+                              lambda b: _download_image_via_proxy(proxy_url, cookies=cookies, timeout=b), 6)
             if data:
                 return data, m
 
@@ -6239,12 +8208,12 @@ class App(tk.Tk):
 
                 if proxy_url:
                     data, m = attempt("browser_tab_proxy",
-                                      lambda b: _download_image_browser_tab(drv, proxy_url, timeout=b), 20)
+                                      lambda b: _download_image_browser_tab(drv, proxy_url, timeout=b), 12)
                     if data:
                         return data, m
 
                 data, m = attempt("browser_tab",
-                                  lambda b: _download_image_browser_tab(drv, url, timeout=b), 20)
+                                  lambda b: _download_image_browser_tab(drv, url, timeout=b), 12)
                 if data:
                     return data, m
         finally:
@@ -6281,10 +8250,11 @@ class App(tk.Tk):
                 "Выберите хотя бы один сервер."
             )
             return
-        if not self._ensure_fetch_browser():
+        self.http.fast_enabled = self.v_fast.get()
+        if not (self.http.fast_enabled and self.http.get_cookies()) and not self._ensure_fetch_browser():
             messagebox.showerror(
-                "Нет браузера",
-                "Формирование документов требует парсинга тем через браузер.\n"
+                "Нет транспорта",
+                "Нет cookies для быстрого пути и браузер недоступен.\n"
                 "Сначала нажмите «🔑 Войти»."
             )
             return
@@ -6293,8 +8263,8 @@ class App(tk.Tk):
         self._log("=" * 50, "head")
         self._log(
             f"🚀 Формирование документов: "
-            f"общих разделов {len(general_nodes)}, "
-            f"серверов {len(server_nodes)}", "head"
+            f"{len(general_nodes)} {plural(len(general_nodes), 'общий раздел', 'общих раздела', 'общих разделов')}, "
+            f"{len(server_nodes)} {plural(len(server_nodes), 'сервер', 'сервера', 'серверов')}", "head"
         )
 
         def worker():
@@ -6302,10 +8272,17 @@ class App(tk.Tk):
             pid = self._start_emitter("🚀 Сформировать документы")
             em = self._emitter
             try:
-                s_fb = em.step_added(pid, "Проверка фолбэк-браузера", "🌐")
-                em.step_state(s_fb, "running")
-                self._ensure_fetch_browser(emitter=em, parent_id=s_fb)
-                em.step_state(s_fb, "done")
+                self.http.fast_enabled = self.v_fast.get()
+                self.http.ensure_real_ua()
+                s_tr = em.step_added(pid, "Выбор транспорта", "⚡")
+                em.step_state(s_tr, "running")
+                if self.http.fast_enabled and self.http.get_cookies():
+                    em.step_state(s_tr, "done", "⚡ cookies, браузер — по требованию")
+                    self._log("⚡ Быстрый режим: темы качаются через cookies, браузер — только при блокировках",
+                              "info")
+                else:
+                    self._ensure_fetch_browser(emitter=em, parent_id=s_tr)
+                    em.step_state(s_tr, "done", "🌐 браузер")
 
                 s_collect = em.step_added(pid, "Сбор выбранных тем", "📜")
                 em.step_state(s_collect, "running")
@@ -6316,7 +8293,7 @@ class App(tk.Tk):
                     lst = self._collect_checked_threads([sn])
                     server_data.append((sn, lst))
                     self._log(f"🖥 «{sn.title}»: тем {len(lst)}", "info")
-                em.step_state(s_collect, "done", f"Общих: {len(general_threads)}, серверов: {len(server_data)}")
+                em.step_state(s_collect, "done", f"Общих: {len(general_threads)}, {len(server_data)} {plural(len(server_data), 'сервер', 'сервера', 'серверов')}")
 
                 s_dirs = em.step_added(pid, "Создание выходных директорий", "📂")
                 em.step_state(s_dirs, "running")
@@ -6354,6 +8331,18 @@ class App(tk.Tk):
                     server_topics_dir = server_topics_dirs[id(sn)]
                     for t in lst:
                         add_thread_target(t.get("url", ""), server_topics_dir)
+                # v1.19: привязка тем к слоям для «Истории» (общие/сервер).
+                scope_map = {}
+                for t in general_threads:
+                    _k = norm_thread_url(t.get("url", ""))
+                    if _k and "general" not in scope_map.setdefault(_k, []):
+                        scope_map[_k].append("general")
+                for sn, lst in server_data:
+                    _stag = f"server:{sn.title}"
+                    for t in lst:
+                        _k = norm_thread_url(t.get("url", ""))
+                        if _k and _stag not in scope_map.setdefault(_k, []):
+                            scope_map[_k].append(_stag)
                 all_needed = {}
                 for t in general_threads:
                     k = norm_thread_url(t["url"])
@@ -6364,7 +8353,7 @@ class App(tk.Tk):
                         k = norm_thread_url(t["url"])
                         if k not in all_needed:
                             all_needed[k] = t
-                thread_dates = load_thread_dates(self.project.dir)
+                thread_dates = load_thread_dates_cached(self.project.dir)
                 cfg_kw = _autocheck_thread_keywords
                 filtered_needed = {}
                 pre_skipped = []
@@ -6393,8 +8382,8 @@ class App(tk.Tk):
                 s_parse = em.step_added(pid, f"Парсинг содержимого тем ({total} шт)", "⬇")
                 em.step_state(s_parse, "running")
                 self._log(
-                    f"⬇ Парсинг содержимого {total} уникальных тем "
-                    f"(потоков: {self.v_workers.get()})...", "head"
+                    f"⬇ Парсинг содержимого {total} {plural(total, 'уникальная тема', 'уникальные темы', 'уникальных тем')} "
+                    f"({self.v_workers.get()} {plural(self.v_workers.get(), 'поток', 'потока', 'потоков')})...", "head"
                 )
                 cache = {}
                 cache_lock = threading.Lock()
@@ -6420,6 +8409,10 @@ class App(tk.Tk):
                     url = t.get("url", "")
                     if "page could not be loaded" in title.lower():
                         self._log(f"    ⏩ Пропущена обработка битой ссылки из конфига: {url}", "warn")
+                        with done_lock:
+                            done[0] += 1
+                            d = done[0]
+                        em.step_progress(s_parse, d, total)
                         return
                     s_thr = em.step_added(s_parse, f"📄 {title}", "📄")
                     em.step_state(s_thr, "running")
@@ -6446,6 +8439,7 @@ class App(tk.Tk):
                                     f"    ⏭ Тема пропущена (создана до указанной даты): «{title}» ({thread_date})",
                                     "warn")
                                 em.step_state(s_thr, "skipped", f"дата {thread_date}")
+                                em.step_state(s_content, "skipped", "дата до фильтра")
                                 with skipped_old_lock:
                                     skipped_old_urls.append(norm_thread_url(url))
                                 with done_lock:
@@ -6464,9 +8458,13 @@ class App(tk.Tk):
                             )
                             with failed_lock:
                                 failed_threads.append(title)
+                            with done_lock:
+                                done[0] += 1
+                                d = done[0]
+                            em.step_progress(s_parse, d, total)
                             return
                         post_count = len(data.get("posts", []))
-                        em.step_state(s_content, "done", f"{post_count} постов")
+                        em.step_state(s_content, "done", f"{post_count} {plural(post_count, 'пост', 'поста', 'постов')}")
 
                         s_img = em.step_added(s_thr, "Обработка изображений", "🖼")
                         em.step_state(s_img, "running")
@@ -6515,7 +8513,7 @@ class App(tk.Tk):
                             em.step_state(s_thr, "done")
                         elif old_cache.get("checksum") != new_checksum:
                             diff_lines = diff_thread_blocks(old_cache.get("data", {}), data)
-                            em.step_state(s_cmp, "changed", f"{len(diff_lines)} изменений")
+                            em.step_state(s_cmp, "changed", f"{len(diff_lines)} {plural(len(diff_lines), 'изменение', 'изменения', 'изменений')}")
                             self.project.save_thread_cache(url, data, new_checksum, fpo=fpo)
                             self._save_topic_docx(t, data, diff_lines=diff_lines, is_new=False, target_dirs=target_dirs)
                             with report_lock:
@@ -6544,14 +8542,16 @@ class App(tk.Tk):
                 list(self.executor.map(work, all_needed.items()))
                 if new_dates:
                     save_thread_dates(self.project.dir, new_dates)
-                    self._log(f"💾 Сохранено дат тем: {len(new_dates)}", "info")
+                    self._log(f"💾 {len(new_dates)} {plural(len(new_dates), 'дата темы сохранена', 'даты тем сохранены', 'дат тем сохранено')}", "info")
                 if skipped_old_urls:
                     self.after(0, lambda urls=list(skipped_old_urls): self._uncheck_threads_by_url(urls))
                 em.step_state(s_parse, "done", f"{done[0]}/{total}")
-                self.after(0, lambda: self._show_topics_report(new_topics, changed_topics, unchanged_count[0]))
+                self._record_generate_history(new_topics, changed_topics, unchanged_count[0], scope_map)
+                self._save_history()
+                self.after(0, self._update_history_badge)
                 if failed_threads:
                     self._log(
-                        f"⚠ ВНИМАНИЕ: не удалось загрузить {len(failed_threads)} тем "
+                        f"⚠ ВНИМАНИЕ: не удалось загрузить {len(failed_threads)} {plural(len(failed_threads), 'тему', 'темы', 'тем')} "
                         f"(будут отсутствовать в документе):", "warn"
                     )
                     for ft in failed_threads:
@@ -6572,7 +8572,7 @@ class App(tk.Tk):
                     ocr_min_global=ocr_min_global,
                 )
                 prompt_text = self._load_prompt_text()
-                em.step_state(s_lines, "done", f"{len(general_lines)} строк общих")
+                em.step_state(s_lines, "done", f"{len(general_lines)} {plural(len(general_lines), 'общая строка', 'общие строки', 'общих строк')}")
 
                 s_docx = em.step_added(pid, "Формирование DOCX-файлов", "📄")
                 em.step_state(s_docx, "running")
@@ -6608,10 +8608,10 @@ class App(tk.Tk):
                     self._log(f"✅ Сохранён: {server_path}", "ok")
                     em.step_state(s_srv, "done")
                     ok_count += 1
-                em.step_state(s_docx, "done", f"{ok_count} файлов")
+                em.step_state(s_docx, "done", f"{ok_count} {plural(ok_count, 'файл', 'файла', 'файлов')}")
 
-                self._log(f"🏁 Готово! Файлов: {ok_count}", "ok")
-                self._status(f"✅ Готово. Файлов: {ok_count}")
+                self._log(f"🏁 Готово! {plural(ok_count, 'Файл', 'Файла', 'Файлов')}: {ok_count}", "ok")
+                self._status(f"✅ Готово. {plural(ok_count, 'Файл', 'Файла', 'Файлов')}: {ok_count}")
                 em.process_finished("done", time.monotonic() - t0)
                 self.after(800, lambda: self._open_folder(out))
             except Exception as e:
@@ -6623,6 +8623,130 @@ class App(tk.Tk):
                 self._set_busy(False)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    # ── v1.17: журнал «История» ──────────────────────────────────
+    def _ensure_history_loaded(self):
+        try:
+            dkey = str(self.project.dir)
+        except Exception:
+            return
+        if self._history_loaded_for == dkey:
+            return
+        with self._history_lock:
+            if self._history_loaded_for == dkey:
+                return
+            try:
+                self._history = load_history(self.project.dir)
+            except Exception:
+                self._history = {"topics": {}}
+            self._history_loaded_for = dkey
+
+    def _save_history(self):
+        try:
+            with self._history_lock:
+                data = self._history
+            save_history(self.project.dir, data)
+        except Exception:
+            pass
+
+    def _history_record(self, url, kind, title="", section="", checksum="", diff=None, scopes=None):
+        try:
+            self._ensure_history_loaded()
+            with self._history_lock:
+                return history_append(
+                    self._history, url, kind, title=title, section=section,
+                    checksum=checksum, diff=diff, first_url=url, scopes=scopes,
+                )
+        except Exception:
+            return False
+
+    def _record_generate_history(self, new_topics, changed_topics, unchanged_count, scope_map=None):
+        n_new = 0
+        for title, url in new_topics or []:
+            _sc = (scope_map or {}).get(norm_thread_url(url), [])
+            if self._history_record(url, "new", title=title, scopes=_sc):
+                n_new += 1
+        n_ch = 0
+        for title, url, diff_lines in changed_topics or []:
+            _sc = (scope_map or {}).get(norm_thread_url(url), [])
+            if self._history_record(url, "changed", title=title, diff=diff_lines or [], scopes=_sc):
+                n_ch += 1
+        self._log(
+            f"📜 История обновлена: {n_new} {plural(n_new, 'новая тема', 'новые темы', 'новых тем')}, "
+            f"{n_ch} {plural(n_ch, 'изменённая тема', 'изменённые темы', 'изменённых тем')}, "
+            f"{unchanged_count} {plural(unchanged_count, 'тема без изменений', 'темы без изменений', 'тем без изменений')}. "
+            f"Подробности — кнопка «📜 История».",
+            "ok" if (n_new or n_ch) else "info",
+        )
+
+    def _record_scan_history(self, disappeared, new_found):
+        n_f = 0
+        for _section, _title, _url in new_found or []:
+            if self._history_record(_url, "found", title=_title, section=_section):
+                n_f += 1
+        n_g = 0
+        for _section, _title, _url in disappeared or []:
+            if self._history_record(_url, "gone", title=_title, section=_section):
+                n_g += 1
+        if n_f or n_g:
+            self._log(
+                f"📜 История: {n_f} {plural(n_f, 'найденная тема', 'найденные темы', 'найденных тем')}, "
+                f"{n_g} {plural(n_g, 'пропавшая тема', 'пропавшие темы', 'пропавших тем')}. "
+                f"Подробности — кнопка «📜 История».",
+                "warn" if n_g else "ok",
+            )
+
+    def _log_state_diff(self, diff_lines, stage_label):
+        if diff_lines:
+            self._log(f"⚠ Изменения состояния ({stage_label}), строк: {len(diff_lines)}:", "warn")
+            for ln in (diff_lines or [])[:15]:
+                self._log(f"    {ln}", "warn")
+        else:
+            self._log(
+                f"✅ Состояние галочек «Выбор» и пометок ({stage_label}) корректно — сохранено.",
+                "info",
+            )
+
+    def _update_history_badge(self):
+        btn = getattr(self, "btn_history", None)
+        if btn is None:
+            return
+        try:
+            self._ensure_history_loaded()
+            with self._history_lock:
+                topics = (self._history or {}).get("topics", {})
+                n = sum(1 for t in topics.values() if (t or {}).get("events"))
+            btn.config(text=f"📜 История ({n})" if n else "📜 История")
+        except Exception:
+            pass
+
+    def _clear_history_topic(self, key):
+        try:
+            with self._history_lock:
+                (self._history.get("topics", {}) or {}).pop(key, None)
+            self._save_history()
+            self._update_history_badge()
+        except Exception:
+            pass
+
+    def _clear_history_all(self):
+        try:
+            with self._history_lock:
+                self._history = {"topics": {}}
+            self._save_history()
+            self._update_history_badge()
+        except Exception:
+            pass
+
+    def _show_history(self):
+        try:
+            self._ensure_history_loaded()
+            HistoryWindow(self)
+        except Exception as e:
+            try:
+                messagebox.showerror("История", str(e))
+            except Exception:
+                pass
 
     def _save_topic_docx(self, thread: dict, data: dict, diff_lines, is_new: bool, target_dirs=None):
         fname = safe_name(thread.get("title", "") or "thread") + ".docx"
@@ -6675,36 +8799,6 @@ class App(tk.Tk):
 
         return saved_path
 
-    def _show_topics_report(self, new_topics, changed_topics, unchanged_count):
-        def _do():
-            top = tk.Toplevel(self)
-            top.title("Отчёт по темам")
-            top.configure(bg=C["panel"])
-            top.geometry("720x520")
-            txt = scrolledtext.ScrolledText(top, bg=C["entry"], fg=C["text"], font=("Consolas", 9))
-            txt.pack(fill="both", expand=True, padx=8, pady=8)
-
-            if not new_topics and not changed_topics:
-                txt.insert("end", "✅ Всё корректно, изменений не обнаружено.\n"
-                                   f"Тем без изменений: {unchanged_count}\n")
-            else:
-                if new_topics:
-                    txt.insert("end", f"🆕 НОВЫЕ ТЕМЫ ({len(new_topics)}):\n")
-                    for title, url in new_topics:
-                        txt.insert("end", f"  • {title}\n    {url}\n")
-                    txt.insert("end", "\n")
-                if changed_topics:
-                    txt.insert("end", f"♻ ИЗМЕНЁННЫЕ ТЕМЫ ({len(changed_topics)}):\n")
-                    for title, url, diff_lines in changed_topics:
-                        txt.insert("end", f"  • {title}\n    {url}\n")
-                        for ln in (diff_lines or [])[:30]:
-                            txt.insert("end", f"      {ln}\n")
-                        txt.insert("end", "\n")
-                txt.insert("end", f"✅ Без изменений: {unchanged_count}\n")
-
-            txt.config(state="disabled")
-            self._mk_btn(top, "Закрыть", top.destroy, C["accent"]).pack(pady=6)
-        self.after(0, _do)
 
     def _collect_checked_threads(self, mark_nodes: list):
         result = []
@@ -6758,7 +8852,7 @@ class App(tk.Tk):
 
         self._log(
             f"    📊 _collect_checked_threads: "
-            f"найдено {len(result)} СТРОГО выбранных тем "
+            f"найдено {len(result)} {plural(len(result), 'СТРОГО выбранная тема', 'СТРОГО выбранные темы', 'СТРОГО выбранных тем')} "
             f"из {len(mark_nodes)} корневых узлов (по чекбоксу темы)",
             "info"
         )

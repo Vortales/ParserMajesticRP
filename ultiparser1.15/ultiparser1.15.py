@@ -25,6 +25,9 @@ from urllib.parse import urljoin, urlparse
 from concurrent.futures import ThreadPoolExecutor
 from importlib import import_module
 
+PARSER_NAME = "ultiparser"
+PARSER_VERSION = "1.15"
+
 def _pip(pkg: str) -> bool:
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "-q", pkg])
@@ -53,7 +56,7 @@ def _ensure(module: str, pkg: str, required=True) -> bool:
 
 
 print("=" * 60)
-print("  🚀 ФОРУМ-МЕНЕДЖЕР")
+print(f"  🚀 ФОРУМ-МЕНЕДЖЕР v{PARSER_VERSION}")
 print("=" * 60)
 print("\n🔧 Проверка зависимостей...")
 
@@ -77,7 +80,11 @@ BS_PARSER = "lxml" if HAS_LXML else "html.parser"
 print(f"✅ Готово (парсер: {BS_PARSER})\n")
 
 
-SERVERS_ROOT = Path("ultiparser1.14").absolute()
+# v1.15: папка парсера = папка данных.
+# Скрипт лежит в ultiparser1.15/ultiparser1.15.py, все рабочие файлы
+# (structure.json, config.json, checks.json, Результаты, _cache, images, logs)
+# создаются рядом со скриптом, внутри ultiparser1.15/.
+SERVERS_ROOT = Path(__file__).resolve().parent
 STRUCTURE_FILE = "structure.json"
 CONFIG_FILE = "config.json"
 COOKIES_FILE = "cookies.json"
@@ -2635,13 +2642,16 @@ class DocxGen:
         self.doc.save(path)
 
 def build_server_docx(prompt_text: str, general_lines: list, server_title: str, server_lines: list):
+    """
+    Порядок слоёв в документе (v1.15, сверху вниз):
+      СЛОЙ 2 — ОБЩИЕ ПРАВИЛА (правила проекта);
+      СЛОЙ 3 — ЗАКОНОДАТЕЛЬНАЯ БАЗА конкретного сервера;
+      СЛОЙ 1 — ПРОМТ (самый низ, чтобы ИИ точно держала его в памяти).
+    Добавочный хвостовой шаблон про конец ответа удалён:
+    требование о нём уже есть в самом промте.
+    """
     g = DocxGen()
-    if prompt_text:
-        for ln in prompt_text.split("\n"):
-            g.add(ln.rstrip("\r"))
-        g.add()
-        g.add("=" * 60)
-        g.add()
+    # ── СЛОЙ 2: общие правила проекта ──
     g.add("ОБЩИЕ ПРАВИЛА")
     g.add()
     for ln in general_lines:
@@ -2649,38 +2659,44 @@ def build_server_docx(prompt_text: str, general_lines: list, server_title: str, 
     g.add()
     g.add("=" * 60)
     g.add()
+    # ── СЛОЙ 3: законодательная база конкретного сервера ──
     g.add(f"ЗАКОНОДАТЕЛЬНАЯ БАЗА: {server_title}")
     g.add()
     for ln in server_lines:
         g.add(ln)
-
-    g.add("В конце ответа всегда пиши «===КОНЕЦ ОТВЕТА===» ни при каких обстоятельствах не пропускай данный шаблон. Ответ ВСЕГДА должен заканчиваться строкой ===КОНЕЦ ОТВЕТА===")
-    return g
-
-def build_common_docx(prompt_text: str, general_lines: list):
-    g = DocxGen()
-
+    # ── СЛОЙ 1: промт — САМЫЙ НИЗ документа ──
     if prompt_text:
-        for ln in prompt_text.split("\n"):
-            g.add(ln.rstrip("\r"))
-
         g.add()
         g.add("=" * 60)
         g.add()
+        for ln in prompt_text.split("\n"):
+            g.add(ln.rstrip("\r"))
+    return g
 
+
+def build_common_docx(prompt_text: str, general_lines: list):
+    """
+    Порядок слоёв в документе (v1.15, сверху вниз):
+      СЛОЙ 2 — ОБЩИЕ ПРАВИЛА;
+      СЛОЙ 1 — ПРОМТ (самый низ, чтобы ИИ точно держала его в памяти).
+    Добавочный хвостовой шаблон про конец ответа удалён:
+    требование о нём уже есть в самом промте.
+    """
+    g = DocxGen()
+    # ── СЛОЙ 2: общие правила проекта ──
     g.add("ОБЩИЕ ПРАВИЛА")
     g.add()
-
     for ln in general_lines:
         g.add(ln)
-
-    g.add()
-    g.add("=" * 60)
-    g.add()
-
-    g.add("В конце ответа всегда пиши «===КОНЕЦ ОТВЕТА===» ни при каких обстоятельствах не пропускай данный шаблон. Ответ ВСЕГДА должен заканчиваться строкой ===КОНЕЦ ОТВЕТА===")
-
+    # ── СЛОЙ 1: промт — САМЫЙ НИЗ документа ──
+    if prompt_text:
+        g.add()
+        g.add("=" * 60)
+        g.add()
+        for ln in prompt_text.split("\n"):
+            g.add(ln.rstrip("\r"))
     return g
+
 
 class Project:
     def __init__(self, root_url: str):
@@ -4192,7 +4208,7 @@ class ParticipationWindow(tk.Toplevel):
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Форум-Менеджер")
+        self.title(f"Форум-Менеджер {PARSER_VERSION}")
         self.geometry("1400x900")
         self.minsize(1000, 640)
         self.configure(bg=C["bg"])
