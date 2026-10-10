@@ -131,21 +131,32 @@ assert hl(["general", "server:Miami"], "Miami") == {"general", "server"}
 assert hl(["general", "server:Miami"], "Leo") == {"general"}
 print("H6 ok: history_layers")
 
-# H7: разнос diff по колонкам БЫЛО/СТАЛО
-cns = {}
-exec(def_block("split_diff_columns"), cns)
-sp = cns["split_diff_columns"]
-segs = [("T\n", "title"), ("d\n", "h_date"), ("старое\n", "was"), ("новое\n", "became"),
-        ("+x\n", "add"), ("-y\n", "dlt"), ("ctx\n", "ctx"), ("p\n", "post"), ("\n", None)]
-l, r = sp(segs)
-assert ("старое\n", "was") in l and ("старое\n", "was") not in r
-assert ("-y\n", "dlt") in l and ("-y\n", "dlt") not in r
-assert ("новое\n", "became") in r and ("новое\n", "became") not in l
-assert ("+x\n", "add") in r and ("+x\n", "add") not in l
-for s in [("T\n", "title"), ("d\n", "h_date"), ("ctx\n", "ctx"), ("p\n", "post"), ("\n", None)]:
-    assert s in l and s in r
-assert sp([]) == ([], []) and sp(None) == ([], [])
-print("H7 ok: split_diff_columns")
+# H8: таблица diff БЫЛО/СТАЛО (пары + границы)
+tns = {}
+exec(def_block("_strip_diff_prefix"), tns)
+exec(def_block("pair_diff_lines"), tns)
+exec(def_block("render_diff_table"), tns)
+assert tns["_strip_diff_prefix"]("БЫЛО:  текст") == "текст"
+assert tns["_strip_diff_prefix"]("СТАЛО:x") == "x"
+assert tns["_strip_diff_prefix"]("обычный текст") == "обычный текст"
+pr = tns["pair_diff_lines"]([("БЫЛО: a", "was"), ("СТАЛО: b", "became"), ("СТАЛО: c", "became")])
+assert pr == [("a", "b"), ("", "c")], pr
+assert tns["pair_diff_lines"]([("УДАЛЕНО: x", "dlt")]) == [("x", "")]
+chunks = tns["render_diff_table"]([("старое длинное", "новое")])
+txt = "".join(s for s, _ in chunks)
+tbl = txt.split("\n")
+assert tbl[-1] == ""
+tbl = tbl[:-1]
+assert len({len(l) for l in tbl}) == 1, [len(l) for l in tbl]
+assert tbl[0].startswith("┌") and tbl[0].endswith("┐")
+assert "БЫЛО" in tbl[1] and "СТАЛО" in tbl[1]
+assert tbl[-1].startswith("└") and tbl[-1].endswith("┘")
+assert any("старое длинное" in l and "новое" in l for l in tbl)
+ch2 = tns["render_diff_table"]([("w" * 100, "коротко")], max_col=20)
+t2 = "".join(s for s, _ in ch2).split("\n")[:-1]
+assert len({len(l) for l in t2}) == 1
+assert sum("w" in l for l in t2) >= 2
+print("H8 ok: diff-таблица")
 
 # E1: слова-исключения (тема + раздел)
 xns = {"re": re}
@@ -418,7 +429,8 @@ print("X2 ok: common-docx, пустой промт")
 assert SRC.count('new_threads_found.append((node.title, title, t["url"]))') == 1
 assert SRC.count('disappeared_selected_threads.append((node.title, title, t["url"]))') == 1
 for dead in ("_show_topics_report", "_show_threads_diff_report", "_show_state_report",
-             "FAST_BROWSER_ONLY_COOLDOWN", "_scope_visible", "_on_hmode", "v_hmode"):
+             "FAST_BROWSER_ONLY_COOLDOWN", "_scope_visible", "_on_hmode", "v_hmode",
+             "split_diff_columns", "txt_left", "txt_right", "_combined_text"):
     assert dead not in SRC, dead
 assert SRC.count("btn_history") >= 3
 assert re.search(r"^IMAGE_DOWNLOAD_DEADLINE = 12$", SRC, re.M)
@@ -450,8 +462,8 @@ assert "def final_thread_check_value" in SRC and "blocked_by_exclude" in SRC
 assert "исключения, финал" in SRC and "рестор тоже уважает исключения" in SRC
 assert "def struct_row_hidden" in SRC and "structure_exclude_words" in SRC
 assert "StructureExcludeWindow" in SRC and "Слов-исключений «Структуры»" in SRC
-assert "def split_diff_columns" in SRC and "txt_left" in SRC and "txt_right" in SRC
-assert "def _thread_scopes_by_url" in SRC and "_combined_text" in SRC
+assert "def render_diff_table" in SRC and "def pair_diff_lines" in SRC
+assert "def _thread_scopes_by_url" in SRC and "БЫЛО" in SRC
 assert "BREAK_STREAK_TRIGGER" in SRC and "BREAK_LEVELS" in SRC
 assert "def _note_block_signal" in SRC and "def _wait_breaker" in SRC
 assert "def _sleep_abortable" in SRC and "abort_event" in SRC

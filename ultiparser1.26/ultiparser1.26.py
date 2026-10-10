@@ -4872,22 +4872,70 @@ def history_layers(scopes, server):
     return out
 
 
-def split_diff_columns(segments):
-    """Разносит сегменты (текст, тег) по колонкам БЫЛО/СТАЛО (v1.26).
+def _strip_diff_prefix(text):
+    s = (text or "").lstrip()
+    for p in ("БЫЛО:", "СТАЛО:", "ДОБАВЛЕНО:", "УДАЛЕНО:"):
+        if s.startswith(p):
+            return s[len(p):].lstrip()
+    return text
 
-    was/dlt — только налево, became/add — только направо,
-    всё остальное (заголовки, даты, контекст) — в обе колонки.
+
+def pair_diff_lines(lines):
+    """Пары (слева, справа) из подряд идущих diff-строк (v1.26).
+
+    lines: [(текст_без_перевода_строки, тег)]. was/dlt — налево,
+    became/add — направо, пары по порядку (zip, пустота при нехватке).
     """
     left, right = [], []
-    for s, g in (segments or []):
-        if g in ("became", "add"):
-            right.append((s, g))
-        elif g in ("was", "dlt"):
-            left.append((s, g))
-        else:
-            left.append((s, g))
-            right.append((s, g))
-    return left, right
+    for s, g in (lines or []):
+        if g in ("was", "dlt"):
+            left.append(_strip_diff_prefix(s))
+        elif g in ("became", "add"):
+            right.append(_strip_diff_prefix(s))
+    n = max(len(left), len(right))
+    left += [""] * (n - len(left))
+    right += [""] * (n - len(right))
+    return list(zip(left, right))
+
+
+def render_diff_table(pairs, max_col=48):
+    """Таблица БЫЛО/СТАЛО → плоские чанки [(текст, тег)] (v1.26).
+
+    Границы и шапка — тег "ctx", левая колонка — "was", правая — "became".
+    Все строки одинаковой длины (моноширинный шрифт), длинные переносятся.
+    """
+    import textwrap as _tw
+    pairs = list(pairs or [])
+    wl = min(max([8] + [len(a) for a, _ in pairs]), max_col)
+    wr = min(max([8] + [len(b) for _, b in pairs]), max_col)
+
+    def wrap_cell(s, w):
+        s = (s or "").expandtabs(4)
+        if not s.strip():
+            return [""]
+        out = _tw.wrap(s, width=w, break_long_words=True,
+                       break_on_hyphens=False, replace_whitespace=False,
+                       drop_whitespace=True)
+        return out or [""]
+
+    top = "┌" + "─" * (wl + 2) + "┬" + "─" * (wr + 2) + "┐\n"
+    mid = "├" + "─" * (wl + 2) + "┼" + "─" * (wr + 2) + "┤\n"
+    bot = "└" + "─" * (wl + 2) + "┴" + "─" * (wr + 2) + "┘\n"
+    out = [(top, "ctx")]
+    out += [("│ ", "ctx"), ("БЫЛО".ljust(wl), "was"), (" │ ", "ctx"),
+            ("СТАЛО".ljust(wr), "became"), (" │\n", "ctx")]
+    out.append((mid, "ctx"))
+    for a, b in pairs:
+        la = wrap_cell(a, wl)
+        lb = wrap_cell(b, wr)
+        h = max(len(la), len(lb))
+        la += [""] * (h - len(la))
+        lb += [""] * (h - len(lb))
+        for x, y in zip(la, lb):
+            out += [("│ ", "ctx"), (x.ljust(wl), "was"), (" │ ", "ctx"),
+                    (y.ljust(wr), "became"), (" │\n", "ctx")]
+    out.append((bot, "ctx"))
+    return out
 
 
 class HistoryExcludeWindow(tk.Toplevel):
@@ -5108,34 +5156,21 @@ class HistoryWindow(tk.Toplevel):
 
         right = tk.Frame(paned, bg=C["panel"])
         paned.add(right, minsize=400)
-        cols = tk.PanedWindow(right, orient="horizontal", bg=C["border"],
-                              sashwidth=4, sashrelief="flat")
-        cols.pack(fill="both", expand=True)
-        left_f = tk.Frame(cols, bg=C["panel"])
-        cols.add(left_f, minsize=180)
-        tk.Label(left_f, text="⬅ БЫЛО", bg=C["panel"], fg=C["red"],
-                 font=("Segoe UI", 9, "bold")).pack(fill="x", padx=2, pady=(0, 2))
-        self.txt_left = scrolledtext.ScrolledText(left_f, bg=C["entry"], fg=C["text"],
-                                                  font=("Consolas", 9), wrap="word",
-                                                  relief="flat", highlightthickness=0)
-        self.txt_left.pack(fill="both", expand=True)
-        right_f = tk.Frame(cols, bg=C["panel"])
-        cols.add(right_f, minsize=180)
-        tk.Label(right_f, text="СТАЛО ➡", bg=C["panel"], fg=C["green"],
-                 font=("Segoe UI", 9, "bold")).pack(fill="x", padx=2, pady=(0, 2))
-        self.txt_right = scrolledtext.ScrolledText(right_f, bg=C["entry"], fg=C["text"],
-                                                   font=("Consolas", 9), wrap="word",
-                                                   relief="flat", highlightthickness=0)
-        self.txt_right.pack(fill="both", expand=True)
-        for _w in (self.txt_left, self.txt_right):
-            _w.tag_configure("h_date", foreground=C["accent"], font=("Consolas", 10, "bold"))
-            _w.tag_configure("post", foreground=C["accent2"], font=("Consolas", 9, "bold"))
-            _w.tag_configure("was", foreground=C["red"])
-            _w.tag_configure("became", foreground=C["green"])
-            _w.tag_configure("add", foreground=C["green"])
-            _w.tag_configure("dlt", foreground=C["orange"])
-            _w.tag_configure("ctx", foreground=C["sub"])
-            _w.tag_configure("title", foreground=C["text"], font=("Consolas", 11, "bold"))
+        self.txt = scrolledtext.ScrolledText(right, bg=C["entry"], fg=C["text"],
+                                             font=("Consolas", 9), wrap="none",
+                                             relief="flat", highlightthickness=0)
+        self.txt.pack(fill="both", expand=True)
+        hsb = ttk.Scrollbar(right, orient="horizontal", command=self.txt.xview)
+        hsb.pack(fill="x")
+        self.txt.configure(xscrollcommand=hsb.set)
+        self.txt.tag_configure("h_date", foreground=C["accent"], font=("Consolas", 10, "bold"))
+        self.txt.tag_configure("post", foreground=C["accent2"], font=("Consolas", 9, "bold"))
+        self.txt.tag_configure("was", foreground=C["red"])
+        self.txt.tag_configure("became", foreground=C["green"])
+        self.txt.tag_configure("add", foreground=C["green"])
+        self.txt.tag_configure("dlt", foreground=C["orange"])
+        self.txt.tag_configure("ctx", foreground=C["sub"])
+        self.txt.tag_configure("title", foreground=C["text"], font=("Consolas", 11, "bold"))
 
         bar = tk.Frame(self, bg=C["panel"])
         bar.pack(fill="x", padx=8, pady=(0, 8))
@@ -5281,13 +5316,11 @@ class HistoryWindow(tk.Toplevel):
 
     def _render_right(self):
         t = self._cur_topic()
-        for _w in (self.txt_left, self.txt_right):
-            _w.config(state="normal")
-            _w.delete("1.0", "end")
+        self.txt.config(state="normal")
+        self.txt.delete("1.0", "end")
         if not t:
-            for _w in (self.txt_left, self.txt_right):
-                _w.insert("end", "Выберите тему слева.", "ctx")
-                _w.config(state="disabled")
+            self.txt.insert("end", "Выберите тему слева.", "ctx")
+            self.txt.config(state="disabled")
             return
         title = t.get("title") or "(без названия)"
         segs = [(f"{title}\n", "title")]
@@ -5298,30 +5331,33 @@ class HistoryWindow(tk.Toplevel):
             for text, tag in history_event_segments(ev):
                 segs.append((text + "\n", tag))
             segs.append(("\n", None))
-        left, right = split_diff_columns(segs)
-        for s, g in left:
-            if g:
-                self.txt_left.insert("end", s, g)
-            else:
-                self.txt_left.insert("end", s)
-        for s, g in right:
-            if g:
-                self.txt_right.insert("end", s, g)
-            else:
-                self.txt_right.insert("end", s)
-        self.txt_left.config(state="disabled")
-        self.txt_right.config(state="disabled")
+        # Подряд идущие diff-строки — в таблицу БЫЛО/СТАЛО (v1.26).
+        buf = []
 
-    def _combined_text(self) -> str:
-        try:
-            l = self.txt_left.get("1.0", "end-1c")
-        except Exception:
-            l = ""
-        try:
-            r = self.txt_right.get("1.0", "end-1c")
-        except Exception:
-            r = ""
-        return f"===== БЫЛО =====\n{l}\n\n===== СТАЛО =====\n{r}\n"
+        def flush():
+            if not buf:
+                return
+            pairs = pair_diff_lines([(s[:-1] if s.endswith("\n") else s, g) for s, g in buf])
+            del buf[:]
+            if not pairs:
+                return
+            for s, g in render_diff_table(pairs):
+                if g:
+                    self.txt.insert("end", s, g)
+                else:
+                    self.txt.insert("end", s)
+
+        for s, g in segs:
+            if g in ("was", "dlt", "became", "add"):
+                buf.append((s, g))
+            else:
+                flush()
+                if g:
+                    self.txt.insert("end", s, g)
+                else:
+                    self.txt.insert("end", s)
+        flush()
+        self.txt.config(state="disabled")
 
     def _open_topic(self):
         t = self._cur_topic()
@@ -5334,7 +5370,7 @@ class HistoryWindow(tk.Toplevel):
 
     def _copy(self):
         try:
-            s = self._combined_text()
+            s = self.txt.get("1.0", "end-1c")
             self.clipboard_clear()
             self.clipboard_append(s)
         except Exception:
@@ -5352,7 +5388,7 @@ class HistoryWindow(tk.Toplevel):
         if not p:
             return
         try:
-            Path(p).write_text(self._combined_text(), encoding="utf-8")
+            Path(p).write_text(self.txt.get("1.0", "end-1c"), encoding="utf-8")
         except Exception as e:
             messagebox.showerror("История", str(e))
 
