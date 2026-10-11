@@ -144,6 +144,16 @@ def azb_code():
     return "\n".join(parts)
 
 
+def norm_code():
+    parts = [const_line("KW_POS_VALUES")]
+    parts.append(def_block("normalize_kw_pos"))
+    parts.append(def_block("normalize_thread_kw_entry"))
+    parts.append(def_block("normalize_node_kw_entry"))
+    parts.append(def_block("normalize_exclude_words"))
+    parts.append(def_block("normalize_config"))
+    return "\n".join(parts)
+
+
 def date_fn_code():
     i = SRC.index("_TIME_DT_RE = re.compile(")
     j = SRC.index("def thread_dates_path")

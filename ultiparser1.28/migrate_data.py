@@ -10,7 +10,8 @@ cookies.json, thread_dates.json, _cache, images, *.txt с промтом) из
 По умолчанию НЕ копирует «Результаты/*.docx» (они перегенерируются кнопкой
 «Сформировать документы»). Чтобы скопировать и их: --with-results.
 
-Также чинит prompt_path в config.json, если он указывал на старую папку.
+Также чинит prompt_path в config.json, если он указывал на старую папку,
+и нормализует ключевые слова к формату 1.28 (даты тем → АЗБ).
 
 Запуск:
     python migrate_data.py
@@ -82,6 +83,62 @@ def copy_dir(src: Path, dst: Path, force: bool) -> str:
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(src, dst, dirs_exist_ok=True)
     return "скопирована"
+
+
+def normalize_config_file(cfg_path: Path) -> None:
+    """Доводит config.json до формата 1.28 (зеркало normalize_config из парсера).
+
+    СТАЛЬНОЕ ПРАВИЛО: новая версия обязана есть старые данные.
+    thread.date → thread.azb (непустая дата = azb True, date стирается).
+    """
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
+    except Exception as e:
+        print(f"  ⚠ Не смог прочитать {cfg_path.name} для нормализации: {e}")
+        return
+    if not isinstance(cfg, dict):
+        return
+    changed = False
+
+    def _pos(p):
+        p = str(p or "any").strip().lower()
+        return p if p in ("any", "start", "end") else "any"
+
+    tw = cfg.get("auto_check_thread_keywords")
+    if isinstance(tw, list):
+        new_tw = []
+        for e in tw:
+            if not isinstance(e, dict):
+                n = {"keyword": str(e or "").strip(), "azb": False,
+                     "whole": False, "pos": "any"}
+            else:
+                n = {"keyword": str(e.get("keyword", "") or "").strip(),
+                     "azb": bool(e.get("azb")) or bool(str(e.get("date", "") or "").strip()),
+                     "whole": bool(e.get("whole", False)),
+                     "pos": _pos(e.get("pos", "any"))}
+            changed = changed or (e != n)
+            new_tw.append(n)
+        if changed:
+            cfg["auto_check_thread_keywords"] = new_tw
+    nw = cfg.get("auto_check_section_keywords")
+    if isinstance(nw, list):
+        new_nw = []
+        for e in nw:
+            if not isinstance(e, dict):
+                n = {"keyword": str(e or "").strip(), "whole": False, "pos": "any"}
+            else:
+                n = {"keyword": str(e.get("keyword", "") or "").strip(),
+                     "whole": bool(e.get("whole", False)),
+                     "pos": _pos(e.get("pos", "any"))}
+            changed = changed or (e != n)
+            new_nw.append(n)
+        if changed:
+            cfg["auto_check_section_keywords"] = new_nw
+    if changed:
+        cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+        print("  ✓ config.json нормализован к формату 1.28 (даты тем → АЗБ)")
+    else:
+        print("  ℹ config.json уже в формате 1.28")
 
 
 def fix_prompt_path(cfg_path: Path) -> None:
@@ -162,6 +219,7 @@ def main() -> None:
     print("\n— Конфиг —")
     if (dst_data / "config.json").exists():
         fix_prompt_path(dst_data / "config.json")
+        normalize_config_file(dst_data / "config.json")
     else:
         print("  · config.json нет — будет создан при первом запуске.")
 

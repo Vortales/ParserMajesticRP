@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from extract28 import (SRC, TARGET, def_block, plural_code, history_code, diff_code,
                        image_block_code, ocr_gate_code, emitter_code, docx_code,
                        dates_code, date_fn_code, exclude_code, match_code,
-                       topic_json_code, azb_code)
+                       topic_json_code, azb_code, norm_code)
 
 # ---------- P1: plurals ----------
 ns = {}
@@ -263,6 +263,7 @@ print("E4 ok: struct_row_hidden + checked-bypass")
 # E5: автоотметка тем — только слова тем (слова разделов не действуют)
 e5ns = {"re": re}
 exec(match_code(), e5ns)
+exec(norm_code(), e5ns)
 exec(def_block("set_autocheck_keywords"), e5ns)
 exec(def_block("should_autocheck_new_thread"), e5ns)
 exec(def_block("thread_autocheck_match"), e5ns)
@@ -604,6 +605,48 @@ with tempfile.TemporaryDirectory() as _td:
     assert set(_m) == {"u1", "u2"} and (Path(_td) / "azb.json").exists()
 print("AZB5 ok: azb.json roundtrip")
 
+# ---------- N1-N4: нормализация старых данных (v1.28-правка) ----------
+nns = {}
+exec(norm_code(), nns)
+
+# N1: thread-записи (legacy date → azb)
+_nt = nns["normalize_thread_kw_entry"]
+assert _nt({"keyword": "УК", "date": "01.01.2024", "whole": True, "pos": "start"}) == \
+    {"keyword": "УК", "azb": True, "whole": True, "pos": "start"}
+assert _nt({"keyword": "УК", "date": "", "whole": False, "pos": "any"})["azb"] is False
+assert "date" not in _nt({"keyword": "УК", "date": "01.01.2024"})
+assert _nt({"keyword": "УК", "azb": True}) == {"keyword": "УК", "azb": True, "whole": False, "pos": "any"}
+assert _nt("голое слово") == {"keyword": "голое слово", "azb": False, "whole": False, "pos": "any"}
+assert _nt({"keyword": "x", "pos": "криво"})["pos"] == "any"
+assert _nt(_nt({"keyword": "УК", "date": "01.01.2024"})) == _nt({"keyword": "УК", "azb": True})  # idempotent
+print("N1 ok: normalize_thread_kw_entry")
+
+# N2: node-записи
+_nn = nns["normalize_node_kw_entry"]
+assert _nn({"keyword": "Суд", "whole": 1, "pos": "end"}) == {"keyword": "Суд", "whole": True, "pos": "end"}
+assert _nn("голое") == {"keyword": "голое", "whole": False, "pos": "any"}
+assert _nn({"keyword": "x", "pos": "??"})["pos"] == "any"
+print("N2 ok: normalize_node_kw_entry")
+
+# N3: весь конфиг
+_nc = nns["normalize_config"]
+_old = {"auto_check_thread_keywords": [{"keyword": "УК", "date": "02.02.2023", "whole": False, "pos": "any"}, "строка"],
+        "auto_check_section_keywords": [{"keyword": "Суд", "whole": False, "pos": "начало"}],
+        "auto_check_thread_exclude": ["мусор", {"word": "  хлам  "}, "", None],
+        "workers": 2}
+_new = _nc(_old)
+assert _new["auto_check_thread_keywords"][0] == {"keyword": "УК", "azb": True, "whole": False, "pos": "any"}
+assert _new["auto_check_thread_keywords"][1]["keyword"] == "строка"
+assert _new["auto_check_section_keywords"] == [{"keyword": "Суд", "whole": False, "pos": "any"}]
+assert _new["auto_check_thread_exclude"] == ["мусор", "хлам"]
+assert _new["workers"] == 2 and _nc(_new) == _new  # чужое цело, idempotent
+assert _nc({}) == {} and _nc(None) == {} and "auto_check_thread_keywords" not in _nc({"a": 1})
+print("N3 ok: normalize_config")
+
+# N4: исключения
+assert nns["normalize_exclude_words"]([" a ", {"word": "b"}, {}, None, 5]) == ["a", "b", "5"]
+print("N4 ok: normalize_exclude_words")
+
 for dead in ("_show_topics_report", "_show_threads_diff_report", "_show_state_report",
              "FAST_BROWSER_ONLY_COOLDOWN", "_scope_visible", "_on_hmode", "v_hmode",
              "split_diff_columns", "txt_left", "txt_right", "_combined_text",
@@ -672,6 +715,12 @@ assert 'text="АЗБ"' in SRC and SRC.count("azb_date=") == 6
 assert '"azb": bool(item[2].get())' in SRC
 assert "date_entry" not in SRC and "(дд.мм.гггг)" not in SRC
 assert "АЗБ законодательной базы" in SRC and "·  АЗБ:" in SRC
+assert "def normalize_config" in SRC and "def normalize_thread_kw_entry" in SRC
+assert "def normalize_node_kw_entry" in SRC and "def normalize_exclude_words" in SRC
+assert "def normalize_kw_pos" in SRC
+assert 'C["subtext"]' not in SRC
+assert "return normalize_config(json.loads" in SRC
+assert "normalize_thread_kw_entry(item)" in SRC and "normalize_node_kw_entry(kw)" in SRC
 print("G1-G2 ok: статические стражи")
 
 print("ALL FEATURE TESTS PASSED")

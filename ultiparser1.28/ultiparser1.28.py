@@ -3999,7 +3999,7 @@ class Project:
             return {}
 
         try:
-            return json.loads(self.cfg.read_text(encoding="utf-8-sig"))
+            return normalize_config(json.loads(self.cfg.read_text(encoding="utf-8-sig")))
         except Exception as e:
             get_logger().error(f"Не удалось прочитать конфиг {self.cfg}: {e}")
             return {}
@@ -4728,12 +4728,82 @@ _autocheck_thread_keywords = []
 _autocheck_thread_exclude = []
 
 
+# ──────────────────────────────────────────────
+#  v1.28-правка: нормализация конфига ключевых слов.
+#  СТАЛЬНОЕ ПРАВИЛО: новая версия обязана есть старые данные.
+#  Удалённые/заменённые параметры преобразуются здесь, на границе
+#  загрузки — ни диалог, ни матчер старого формата не видят:
+#  thread.date → thread.azb (непустая дата = azb True, ключ date стирается).
+# ──────────────────────────────────────────────
+KW_POS_VALUES = ("any", "start", "end")
+
+
+def normalize_kw_pos(pos) -> str:
+    p = str(pos or "any").strip().lower()
+    return p if p in KW_POS_VALUES else "any"
+
+
+def normalize_thread_kw_entry(entry) -> dict:
+    """Слово тем → {keyword, azb, whole, pos}. Legacy date → azb (idempotent)."""
+    if not isinstance(entry, dict):
+        return {"keyword": str(entry or "").strip(), "azb": False,
+                "whole": False, "pos": "any"}
+    return {"keyword": str(entry.get("keyword", "") or "").strip(),
+            "azb": bool(entry.get("azb")) or bool(str(entry.get("date", "") or "").strip()),
+            "whole": bool(entry.get("whole", False)),
+            "pos": normalize_kw_pos(entry.get("pos", "any"))}
+
+
+def normalize_node_kw_entry(entry) -> dict:
+    """Слово разделов → {keyword, whole, pos} (idempotent)."""
+    if not isinstance(entry, dict):
+        return {"keyword": str(entry or "").strip(), "whole": False, "pos": "any"}
+    return {"keyword": str(entry.get("keyword", "") or "").strip(),
+            "whole": bool(entry.get("whole", False)),
+            "pos": normalize_kw_pos(entry.get("pos", "any"))}
+
+
+def normalize_exclude_words(lst) -> list:
+    out = []
+    for w in lst or []:
+        s = w.get("word", "") if isinstance(w, dict) else w
+        s = str(s or "").strip()
+        if s:
+            out.append(s)
+    return out
+
+
+def normalize_config(cfg: dict) -> dict:
+    """Весь конфиг к текущему формату. Отсутствующие ключи не создаются."""
+    if not isinstance(cfg, dict):
+        return {}
+    out = dict(cfg)
+    if "auto_check_thread_keywords" in out:
+        try:
+            out["auto_check_thread_keywords"] = [
+                normalize_thread_kw_entry(e) for e in out.get("auto_check_thread_keywords") or []]
+        except Exception:
+            out["auto_check_thread_keywords"] = []
+    if "auto_check_section_keywords" in out:
+        try:
+            out["auto_check_section_keywords"] = [
+                normalize_node_kw_entry(e) for e in out.get("auto_check_section_keywords") or []]
+        except Exception:
+            out["auto_check_section_keywords"] = []
+    if "auto_check_thread_exclude" in out:
+        try:
+            out["auto_check_thread_exclude"] = normalize_exclude_words(out.get("auto_check_thread_exclude"))
+        except Exception:
+            out["auto_check_thread_exclude"] = []
+    return out
+
+
 def set_autocheck_keywords(node_kw, thread_kw, thread_exclude=None):
     global _autocheck_node_keywords, _autocheck_thread_keywords, _autocheck_thread_exclude
-    _autocheck_node_keywords = list(node_kw or [])
-    _autocheck_thread_keywords = list(thread_kw or [])
+    _autocheck_node_keywords = [normalize_node_kw_entry(e) for e in (node_kw or [])]
+    _autocheck_thread_keywords = [normalize_thread_kw_entry(e) for e in (thread_kw or [])]
     if thread_exclude is not None:
-        _autocheck_thread_exclude = list(thread_exclude)
+        _autocheck_thread_exclude = normalize_exclude_words(thread_exclude)
 
 
 def is_excluded_by_words(title: str, section: str = "", exclude_words=None) -> bool:
@@ -6068,10 +6138,8 @@ class KeywordConfigWindow(tk.Toplevel):
                  bg=C["panel"], fg=C["accent"], font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(5, 2))
         node_kw = cfg.get("auto_check_section_keywords", [])
         for kw in node_kw:
-            if isinstance(kw, dict):
-                self._add_node_entry(kw.get("keyword", ""), kw.get("whole", False), kw.get("pos", "any"))
-            else:
-                self._add_node_entry(str(kw))
+            e = normalize_node_kw_entry(kw)
+            self._add_node_entry(e["keyword"], e["whole"], e["pos"])
         if not node_kw:
             self._add_node_entry("")
         btns1 = tk.Frame(self._frame, bg=C["panel"])
@@ -6081,17 +6149,11 @@ class KeywordConfigWindow(tk.Toplevel):
         tk.Label(self._frame, text="Ключевые слова для тем:",
                  bg=C["panel"], fg=C["accent2"], font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(10, 2))
         tk.Label(self._frame, text="АЗБ = тема не старше средней даты «Законодательной базы» её сервера",
-                 bg=C["panel"], fg=C["subtext"], font=("Segoe UI", 8)).pack(anchor="w")
+                 bg=C["panel"], fg=C["sub"], font=("Segoe UI", 8)).pack(anchor="w")
         thread_kw = cfg.get("auto_check_thread_keywords", [])
         for item in thread_kw:
-            if isinstance(item, dict):
-                # v1.28: ручные даты тем переведены на АЗБ (средняя дата
-                # «Законодательной базы» сервера темы).
-                self._add_thread_entry(item.get("keyword", ""),
-                                       bool(item.get("azb")) or bool(str(item.get("date", "") or "").strip()),
-                                       item.get("whole", False), item.get("pos", "any"))
-            else:
-                self._add_thread_entry(str(item), "")
+            e = normalize_thread_kw_entry(item)
+            self._add_thread_entry(e["keyword"], e["azb"], e["whole"], e["pos"])
         if not thread_kw:
             self._add_thread_entry("", "")
         btns2 = tk.Frame(self._frame, bg=C["panel"])
