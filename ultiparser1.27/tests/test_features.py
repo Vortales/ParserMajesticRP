@@ -260,6 +260,20 @@ assert sh("Закон о полиции", "Раздел", "кодекс", [], Tr
 assert sh("Закон о полиции", "Раздел", "закон", ["полиции"], True) is False
 print("E4 ok: struct_row_hidden + checked-bypass")
 
+# E5: автоотметка тем — только слова тем (слова разделов не действуют)
+e5ns = {"re": re}
+exec(match_code(), e5ns)
+exec(def_block("set_autocheck_keywords"), e5ns)
+exec(def_block("should_autocheck_new_thread"), e5ns)
+exec(def_block("thread_autocheck_match"), e5ns)
+e5ns["set_autocheck_keywords"](["Правила"], ["Уголовный кодекс"], [])
+tam = e5ns["thread_autocheck_match"]
+assert tam(None, "Правила поведения") is False
+assert tam("check", "Правила поведения") is True
+assert tam(None, "Уголовный кодекс штата") is True
+assert tam("uncheck", "Уголовный кодекс штата") is True
+print("E5 ok: thread_autocheck_match")
+
 # ---------- D1-D2: diff-диагностика ----------
 dns = {"re": re, "difflib": __import__("difflib"), "json": json,
        "hashlib": __import__("hashlib")}
@@ -533,7 +547,8 @@ assert SRC.count('disappeared_selected_threads.append((node.title, title, t["url
 for dead in ("_show_topics_report", "_show_threads_diff_report", "_show_state_report",
              "FAST_BROWSER_ONLY_COOLDOWN", "_scope_visible", "_on_hmode", "v_hmode",
              "split_diff_columns", "txt_left", "txt_right", "_combined_text",
-             "_save_topic_docx", "btn_scan_deep", "btn_generate", "btn_keywords"):
+             "_save_topic_docx", "btn_scan_deep", "btn_generate", "btn_stage1",
+             "_apply_keywords_silent", "node_match"):
     assert dead not in SRC, dead
 assert SRC.count("btn_history") >= 3
 assert re.search(r"^IMAGE_DOWNLOAD_DEADLINE = 12$", SRC, re.M)
@@ -571,9 +586,13 @@ assert "def drop_general_when_server" in SRC and "Приоритет серве�
 assert "def segment_sections" in SRC and "def build_topic_json" in SRC
 assert "ultiparser-topic/1" in SRC and "def _save_topic_json" in SRC
 assert "def _do_run_all" in SRC and "def _chain_next_after_stage2" in SRC
-assert "def _apply_keywords_silent" in SRC and "self._chain" in SRC
+assert "self._chain" in SRC and "Выполнить всё (2→3)" in SRC
 assert "def _global_copy" in SRC and "bind_all" in SRC
-assert "btn_stage1" in SRC and "btn_run_all" in SRC and "Выполнить всё" in SRC
+assert "btn_stage2" in SRC and "btn_stage3" in SRC and "btn_run_all" in SRC
+assert "btn_keywords" in SRC and "Ключевые слова" in SRC
+assert "def thread_autocheck_match" in SRC
+assert "v_struct_excl_on" in SRC and "def _toggle_struct_excl" in SRC
+assert "def _guarded_after_build" in SRC and "Ошибка перестроения дерева" in SRC
 assert "clean_Общие правила" in SRC and "flat=False" in SRC
 assert "def _prune_unchecked_topics" in SRC and "_layer_by_url" in SRC
 assert "def snap(iid)" in SRC and "checked=_checked" in SRC

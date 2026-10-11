@@ -3285,7 +3285,6 @@ class Scanner:
                 thr_title = t.get("title", "")
                 cached_date = thread_dates.get(norm_thread_url(thr_url), '')
                 kw_eval = evaluate_thread_keyword_match(thr_title, cached_date, cfg_kw)
-                node_match = should_autocheck_new_node(thr_title)
                 if is_excluded_by_words(thr_title, node.title, _autocheck_thread_exclude):
                     # v1.22: исключение бьёт всё — снимаем и старые, и ручные галочки.
                     if node.thread_checks.get(thr_url, False):
@@ -3295,7 +3294,7 @@ class Scanner:
                     if node.thread_checks.get(thr_url, False):
                         node.thread_checks[thr_url] = False
                         unchecked_by_date += 1
-                elif kw_eval == 'check' or node_match:
+                elif thread_autocheck_match(kw_eval, thr_title):
                     if not node.thread_checks.get(thr_url, False):
                         node.thread_checks[thr_url] = True
                         autochecked_existing += 1
@@ -4821,6 +4820,15 @@ def should_autocheck_new_thread(title: str) -> bool:
         if match_keyword(title, item):
             return True
     return False
+
+def thread_autocheck_match(kw_eval, thr_title) -> bool:
+    """Автоотметка темы — ТОЛЬКО по словам тем (v1.27-правка, чистая).
+
+    Слова разделов на темы не действуют: раньше название темы сверялось
+    и со списком разделов — широкие слова («Правила», «Суд»…) отмечали
+    темы, которых «нет в ключевых словах».
+    """
+    return kw_eval == 'check' or should_autocheck_new_thread(thr_title)
 
 def final_thread_check_value(*, excluded: bool, kw_eval, was_checked: bool, kw_match: bool) -> bool:
     """Финальное решение по галочке темы (v1.24, чистая функция для тестов).
@@ -6546,6 +6554,8 @@ class App(tk.Tk):
         self.btn_load = self._mk_btn(bar, "💾 Загрузить", self._do_load, C["accent2"])
         self.btn_reset_profile = self._mk_btn(bar, "🧹 Сброс профиля", self._reset_browser_profile, C["red"])
         self.btn_reset_profile.pack(side="left", padx=3)
+        self.btn_keywords = self._mk_btn(bar, "🔑 Ключевые слова", self._open_keyword_config, C["accent2"])
+        self.btn_keywords.pack(side="left", padx=3)
         self.btn_topic_filter = self._mk_btn(bar, "🔍 Фильтр тем", self._open_topic_filter, C["accent2"])
         self.btn_topic_filter.pack(side="left", padx=3)
 
@@ -6572,21 +6582,21 @@ class App(tk.Tk):
         tk.Label(bar2, textvariable=self.v_marks_info, bg=C["panel"], fg=C["sub"], font=("Segoe UI", 9)).pack(side="right", padx=10)
 
         # v1.27: единый конвейер вместо разрозненных кнопок.
+        # Правка: только Этапы 2–3; «Ключевые слова» — отдельный фильтр,
+        # а Этап 1 («Сканировать» + ручные пометки) в конвейер не входит.
         bar3 = tk.LabelFrame(outer, text="Конвейер", bg=C["panel"], fg=C["accent"],
                              font=("Segoe UI", 9, "bold"), pady=6, padx=10)
         bar3.pack(fill="x")
-        self.btn_stage1 = self._mk_btn(bar3, "Этап 1: Ключевые слова",
-                                       self._open_keyword_config, C["accent2"])
         self.btn_stage2 = self._mk_btn(bar3, "Этап 2: Сканировать выбранные",
                                        self._do_scan_deep, C["orange"])
         self.btn_stage3 = self._mk_btn(bar3, "Этап 3: Сформировать документы",
                                        self._do_generate, C["green"])
-        self.btn_run_all = self._mk_btn(bar3, "▶ Выполнить всё (1→2→3)",
+        self.btn_run_all = self._mk_btn(bar3, "▶ Выполнить всё (2→3)",
                                         self._do_run_all, C["accent"])
-        for b in (self.btn_stage1, self.btn_stage2, self.btn_stage3,
+        for b in (self.btn_stage2, self.btn_stage3,
                   self.btn_run_all):
             b.pack(side="left", padx=3)
-        tk.Label(bar3, text="по одному или всё сразу: слова → скан → документы (+clean)",
+        tk.Label(bar3, text="по одному или всё сразу: скан → документы (+clean)",
                  bg=C["panel"], fg=C["sub"], font=("Segoe UI", 8)).pack(side="right", padx=10)
 
     def _on_tree_double_click(self, event):
@@ -6672,6 +6682,11 @@ class App(tk.Tk):
                  font=("Segoe UI", 8)).pack(side="left", padx=4)
         self._mk_btn(sframe, "🚫 Исключения…", self._open_struct_exclude,
                      C["accent2"], small=True).pack(side="left", padx=4)
+        # v1.27-правка: временное отключение исключений структуры (на сессию).
+        self.v_struct_excl_on = tk.BooleanVar(value=True)
+        self.btn_struct_excl_toggle = self._mk_btn(sframe, "🚫 Искл.: ВКЛ", self._toggle_struct_excl,
+                                                   C["green"], small=True)
+        self.btn_struct_excl_toggle.pack(side="left", padx=4)
         self._struct_hidden = []
         wrap.columnconfigure(0, weight=1)
         wrap.rowconfigure(0, weight=1)
@@ -6778,7 +6793,7 @@ class App(tk.Tk):
                           self.btn_scan, self.btn_login, self.btn_load,
                           self.btn_mark_general, self.btn_mark_server,
                           self.btn_unmark, self.btn_topic_filter,
-                          self.btn_stage1, self.btn_stage2, self.btn_stage3,
+                          self.btn_keywords, self.btn_stage2, self.btn_stage3,
                           self.btn_run_all,
                       ) + tuple(extra)
             if on:
@@ -6921,6 +6936,23 @@ class App(tk.Tk):
         except Exception:
             pass
 
+    def _toggle_struct_excl(self):
+        """v1.27-правка: временно вкл/выкл исключений структуры (только показ)."""
+        try:
+            on = not bool(self.v_struct_excl_on.get())
+            self.v_struct_excl_on.set(on)
+        except Exception:
+            return
+        try:
+            self.btn_struct_excl_toggle.config(text=f"🚫 Искл.: {'ВКЛ' if on else 'ВЫКЛ'}")
+        except Exception:
+            pass
+        self._log(f"🚫 Исключения структуры: {'ВКЛЮЧЕНЫ' if on else 'ВРЕМЕННО ОТКЛЮЧЕНЫ'}", "info")
+        try:
+            self._apply_struct_filter()
+        except Exception:
+            pass
+
     def _apply_struct_filter(self):
         """Поиск по темам/разделам в дереве + исключения структуры (v1.25; v1.27: снапшот + checked)."""
         try:
@@ -6930,6 +6962,13 @@ class App(tk.Tk):
         try:
             excl = list((self.project.load_config() or {}).get("structure_exclude_words", []) or [])
         except Exception:
+            excl = []
+        # v1.27-правка: тумблер временно гасит исключения структуры (только показ).
+        try:
+            _excl_on = bool(self.v_struct_excl_on.get())
+        except Exception:
+            _excl_on = True
+        if not _excl_on:
             excl = []
         # Возвращаем спрятанное: по родителям, в порядке исходных индексов.
         try:
@@ -7060,6 +7099,17 @@ class App(tk.Tk):
             pass
 
     def _build_tree(self, nodes):
+        # v1.27-правка: сначала удаляем отсоединённые фильтром (их delete
+        # по видимым не достаёт — сироты плодили ::N-суффиксы и мусор,
+        # который пропадал только с перезапуском).
+        try:
+            for _iid, _par, _idx in list(getattr(self, "_struct_hidden", []) or []):
+                try:
+                    self.tree.delete(_iid)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         self._struct_hidden = []
         self.tree.delete(*self.tree.get_children())
         self._checks.clear()
@@ -7578,7 +7628,6 @@ class App(tk.Tk):
 
             cached_date = thread_dates.get(key, '')
             kw_eval = evaluate_thread_keyword_match(thr_title, cached_date, _autocheck_thread_keywords)
-            node_match = should_autocheck_new_node(thr_title)
             # v1.24: исключения бьют и финальное восстановление (иначе оно
             # воскрешало галочки, снятые сканером, и ставило новые мимо списка).
             try:
@@ -7588,7 +7637,7 @@ class App(tk.Tk):
             except Exception:
                 _excluded = False
             _was = key in checked_threads
-            _kwm = (kw_eval == 'check' or node_match or should_autocheck_new_thread(thr_title))
+            _kwm = thread_autocheck_match(kw_eval, thr_title)
             if _excluded and kw_eval != 'uncheck' and (_was or _kwm):
                 blocked_by_exclude += 1
             val = final_thread_check_value(excluded=_excluded, kw_eval=kw_eval,
@@ -8317,7 +8366,7 @@ class App(tk.Tk):
                         em.step_state(s_build, "done")
                         em.process_finished("done", time.monotonic() - t0)
 
-                self.after(0, _after_build)
+                self.after(0, self._guarded_after_build(_after_build, "Этап 1"))
                 self._status(
                     f"✅ Этап 1 завершён: {cnt} {plural(cnt, 'раздел', 'раздела', 'разделов')}. "
                     f"Пометьте нужные → «Этап 2»."
@@ -8753,7 +8802,7 @@ class App(tk.Tk):
                     # v1.27: цепочка «Выполнить всё» — дальше Этап 3.
                     self.after(0, self._chain_next_after_stage2)
 
-                self.after(0, _after_build)
+                self.after(0, self._guarded_after_build(_after_build, "Этап 2"))
                 total = sum(len(flatten_nodes([n])) for n in selected)
                 self._status(f"✅ Этап 2 завершён. Просканировано: {total} {plural(total, 'узел', 'узла', 'узлов')}")
             except Exception as e:
@@ -8770,29 +8819,8 @@ class App(tk.Tk):
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _apply_keywords_silent(self):
-        """v1.27: Этап 1 без диалога — сохранённые слова/исключения на дерево."""
-        try:
-            cfg = self.project.load_config() or {}
-            set_autocheck_keywords(cfg.get("auto_check_section_keywords", []),
-                                   cfg.get("auto_check_thread_keywords", []),
-                                   cfg.get("auto_check_thread_exclude", []))
-        except Exception as e:
-            self._log(f"⚠ Ключевые слова не прочитаны: {e}", "warn")
-            return False
-        try:
-            before = self._snapshot_state()
-            self._apply_pre_scan_selection(before)
-            self._save_state()
-            self._apply_struct_filter()
-        except Exception as e:
-            self._log(f"⚠ Применение ключевых слов: {e}", "warn")
-            return False
-        self._log("✅ Этап 1: ключевые слова применены (молча)", "ok")
-        return True
-
     def _do_run_all(self):
-        """v1.27: цепочка «Выполнить всё»: Этап 1 → 2 → 3."""
+        """v1.27: цепочка «Выполнить всё»: Этап 2 → 3 (правка: без этапа 1)."""
         if self._running:
             return
         if not self.nodes:
@@ -8808,14 +8836,12 @@ class App(tk.Tk):
                 "Отметьте хотя бы один корневой раздел как «Сервер»."
             )
             return
-        selected = self._ask_selected_servers(server_nodes, "Выполнить всё (1→2→3)")
+        selected = self._ask_selected_servers(server_nodes, "Выполнить всё (2→3)")
         if selected is None:
             self._log("↩ «Выполнить всё» отменено", "warn")
             return
         self._log("=" * 50, "head")
-        self._log("▶ ВЫПОЛНИТЬ ВСЁ: Этап 1 → Этап 2 → Этап 3", "head")
-        if not self._apply_keywords_silent():
-            return
+        self._log("▶ ВЫПОЛНИТЬ ВСЁ: Этап 2 → Этап 3", "head")
         self._do_scan_deep(list(selected), _chain=True)
 
     def _chain_next_after_stage2(self):
@@ -8902,6 +8928,16 @@ class App(tk.Tk):
             for r in removed[:20]:
                 self._log(f"    • {r}", "warn")
         return len(removed)
+
+    def _guarded_after_build(self, fn, stage_label):
+        """v1.27-правка: перестроение дерева с видимой ошибкой (не молча)."""
+        def run():
+            try:
+                fn()
+            except Exception as e:
+                self._log(f"❌ Ошибка перестроения дерева ({stage_label}): {e}", "err")
+                get_logger().exception(e)
+        return run
 
     def _do_stop(self):
         self._abort.set()
