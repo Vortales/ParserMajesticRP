@@ -4171,21 +4171,38 @@ def text_to_pdf_bytes(text: str) -> bytes:
         all_objs.append(p_bytes)
         all_objs.append(c_bytes)
 
+    tounicode = (
+        b'/CIDInit /ProcSet findresource begin\n'
+        b'12 dict begin\n'
+        b'begincmap\n'
+        b'/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n'
+        b'/CMapName /Custom-ToUnicode def\n'
+        b'/CMapType 2 def\n'
+        b'1 begincodespacerange\n'
+        b'<0000> <FFFF>\n'
+        b'endcodespacerange\n'
+        b'1 beginbfrange\n'
+        b'<0000> <FFFF> <0000>\n'
+        b'endbfrange\n'
+        b'endcmap\n'
+        b'CMapName currentdict /CMap defineresource pop\n'
+        b'end\n'
+        b'end\n'
+    )
     font_bytes = (
         b"1000 0 obj\n"
         b"<< /Type /Font /Subtype /Type0 /BaseFont /Arial /Encoding /Identity-H "
-        b"/DescendantFonts [1001 0 R] >>\nendobj\n"
+        b"/DescendantFonts [1001 0 R] /ToUnicode 1003 0 R >>\nendobj\n"
         b"1001 0 obj\n"
-        b"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Arial /CIDSystemInfo "
-        b"<< /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> "
-        b"/FontDescriptor 1002 0 R /DW 500 >>\nendobj\n"
-        b"1002 0 obj\n"
         b"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Arial /CIDSystemInfo "
         b"<< /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> "
         b"/FontDescriptor 1002 0 R /DW 500 >>\nendobj\n"
         b"1002 0 obj\n"
         b"<< /Type /FontDescriptor /FontName /Arial /Flags 32 /FontBBox [-665 -325 2000 1006] "
         b"/ItalicAngle 0 /Ascent 728 /Descent -210 /CapHeight 660 /StemV 50 >>\nendobj\n"
+        b"1003 0 obj\n"
+        b"<< /Length " + str(len(tounicode)).encode("latin1") + b" >>\nstream\n"
+        + tounicode + b"endstream\nendobj\n"
     )
     all_objs.append(font_bytes)
 
@@ -4209,7 +4226,7 @@ def text_to_pdf_bytes(text: str) -> bytes:
 def convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> bool:
     """
     v1.31: Конвертирует .docx в .pdf.
-    Сначала пытается использовать системные конвертеры (docx2pdf на Windows,
+    Сначала пытается использовать системные конвертеры (Word COM / docx2pdf на Windows,
     libreoffice/soffice в headless режиме), а при их отсутствии выполняет
     высоконадёжную прямую генерацию PDF из XML-структуры .docx.
     """
@@ -4220,23 +4237,37 @@ def convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> bool:
 
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 1. Попытка через docx2pdf (если доступен в окружении)
+    # 1. Попытка на Windows через Word COM (win32com)
+    if platform.system() == "Windows":
+        try:
+            import win32com.client  # type: ignore
+            word = win32com.client.Dispatch("Word.Application")
+            word.Visible = False
+            doc = word.Documents.Open(str(docx_path.resolve()))
+            doc.SaveAs(str(pdf_path.resolve()), FileFormat=17)  # wdFormatPDF = 17
+            doc.Close()
+            word.Quit()
+            if pdf_path.is_file() and pdf_path.stat().st_size > 0:
+                return True
+        except Exception:
+            pass
+
+    # 2. Попытка через docx2pdf (если доступен в окружении)
     try:
-        import docx2pdf
+        import docx2pdf  # type: ignore
         docx2pdf.convert(str(docx_path), str(pdf_path))
         if pdf_path.is_file() and pdf_path.stat().st_size > 0:
             return True
     except Exception:
         pass
 
-    # 2. Попытка через libreoffice / soffice CLI
+    # 3. Попытка через libreoffice / soffice CLI
     for cmd in ("libreoffice", "soffice"):
         try:
             res = subprocess.run(
                 [cmd, "--headless", "--convert-to", "pdf", "--outdir", str(pdf_path.parent), str(docx_path)],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30
             )
-            # libreoffice сохраняет как <basename>.pdf в outdir
             expected = pdf_path.parent / (docx_path.stem + ".pdf")
             if expected.is_file() and expected.stat().st_size > 0:
                 if expected != pdf_path:
@@ -4245,7 +4276,7 @@ def convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> bool:
         except Exception:
             pass
 
-    # 3. Высоконадёжный чистый Python fallback: чтение XML и генерация валидного PDF
+    # 4. Высоконадёжный чистый Python fallback: чтение XML и генерация валидного PDF с ToUnicode CMap
     try:
         txt = extract_text_from_docx(docx_path)
         pdf_bytes = text_to_pdf_bytes(txt)
@@ -10021,11 +10052,12 @@ class App(tk.Tk):
             if err_count == 0:
                 em.step_state(s_all, "done", f"{ok_count} готово")
                 self._log(f"🎉 Этап 4 завершён успешно: {ok_count} PDF и зашифрованных файлов за {dt:.1f}с", "head")
+                em.process_finished("done", dt)
             else:
                 em.step_state(s_all, "failed" if ok_count == 0 else "done", f"{ok_count} успешно, {err_count} ошибок")
                 self._log(f"⚠️ Этап 4 завершён с ошибками: {ok_count} успешно, {err_count} ошибок за {dt:.1f}с", "warn")
+                em.process_finished("warn" if ok_count > 0 else "error", dt)
 
-            self._stop_emitter()
             self._set_busy(False)
 
         threading.Thread(target=worker, daemon=True).start()

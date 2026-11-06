@@ -21,7 +21,7 @@ class TestV131Features(unittest.TestCase):
         self.ns = {}
         fernet_helpers = grab("# ─── v1.31: Чистая реализация AES-128", "def get_encrypt_tool_function")
         code = (
-            "import os\nimport time\nimport re\nimport subprocess\nimport zipfile\nimport xml.etree.ElementTree as ET\nimport sys\n"
+            "import os\nimport time\nimport re\nimport subprocess\nimport zipfile\nimport xml.etree.ElementTree as ET\nimport sys\nimport platform\n"
             "from pathlib import Path\n"
             "def get_logger():\n"
             "    import logging\n"
