@@ -10,6 +10,7 @@ import webbrowser
 import hashlib
 import logging
 import zipfile
+import xml.etree.ElementTree as ET
 import difflib
 import platform
 import subprocess
@@ -5130,6 +5131,7 @@ C = dict(
     bg="#12121f", panel="#1c1c2e", panel2="#22223a",
     accent="#7c6af7", accent2="#4ea8de", green="#3ddc84",
     red="#ff5370", yellow="#ffcb6b", orange="#f78c6c",
+    purple="#b388ff",
     text="#eeeeff", sub="#8888aa", entry="#0d0d1a",
     border="#33335a", sel="#2d2b55",
     lv0="#c792ea", lv1="#82aaff", lv2="#4ec9b0",

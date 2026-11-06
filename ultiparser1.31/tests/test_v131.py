@@ -129,3 +129,7 @@ class TestV131Features(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_c_palette_and_et_import(self):
+        self.assertIn("import xml.etree.ElementTree as ET", SRC)
+        self.assertIn('"purple":', SRC) or self.assertIn('purple=', SRC)
