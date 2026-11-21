@@ -81,7 +81,25 @@ from docx.shared import Inches, Pt
 from docx.enum.text import WD_LINE_SPACING
 
 BS_PARSER = "lxml" if HAS_LXML else "html.parser"
-print(f"✅ Готово (парсер: {BS_PARSER})\n")
+print(f"✅ Готово (парсер: {BS_PARSER})")
+
+# v1.35: Проверка доступности аппаратного ускорения CUDA для OCR
+def _check_cuda_status():
+    try:
+        import torch
+        if torch.cuda.is_available():
+            device_name = torch.cuda.get_device_name(0)
+            print(f"  ⚡ CUDA: доступна ({device_name}) — EasyOCR будет работать на GPU")
+            return True, device_name
+        else:
+            print("  ℹ CUDA: не найдена / недоступна — EasyOCR будет работать на процессоре (CPU)")
+            return False, ""
+    except Exception as e:
+        print(f"  ℹ CUDA: не определена ({e}) — EasyOCR будет работать на процессоре (CPU)")
+        return False, ""
+
+_CUDA_AVAILABLE, _CUDA_DEVICE_NAME = _check_cuda_status()
+print()
 
 
 # v1.16: папка парсера = папка данных.
@@ -4973,9 +4991,13 @@ def _ocr_image_bytes(data: bytes, diag: dict = None) -> str:
             try:
                 # Попытка инициализации с GPU (если доступен CUDA)
                 _EASYOCR_READER = easyocr.Reader(["ru", "en"], verbose=False, gpu=True)
-            except Exception:
+                dev_str = f"GPU: {_CUDA_DEVICE_NAME}" if _CUDA_DEVICE_NAME else "GPU"
+                print(f"  ⚡ [EasyOCR] Модель загружена на {dev_str}")
+            except Exception as _gpu_e:
                 # Фолбэк на CPU при отсутствии/ошибке CUDA
+                print(f"  ℹ [EasyOCR] Запуск на GPU не удался ({_gpu_e}), переключение на CPU...")
                 _EASYOCR_READER = easyocr.Reader(["ru", "en"], verbose=False, gpu=False)
+                print("  ℹ [EasyOCR] Модель загружена на CPU")
 
         result = _EASYOCR_READER.readtext(np.array(img), detail=0, paragraph=True)
         lines = [str(x).strip() for x in (result or []) if str(x).strip()]

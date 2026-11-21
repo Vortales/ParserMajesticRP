@@ -25,3 +25,9 @@ class TestV135SelectiveOcr(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_cuda_status_message(self):
+        self.assertIn("def _check_cuda_status", SRC)
+        self.assertIn("CUDA: доступна", SRC)
+        self.assertIn("CUDA: не найдена", SRC)
+        self.assertIn("[EasyOCR] Модель загружена", SRC)
