@@ -7397,7 +7397,8 @@ class SelectiveParserWindow(tk.Toplevel):
                 data = None
                 old_cache = self.app.project.load_thread_cache(url)
                 if old_cache and isinstance(old_cache.get("data"), dict):
-                    data = old_cache["data"]
+                    # v1.33: делаем глубокую копию кэша, чтобы OCR-обогащение не мутировало кэш и не терялось
+                    data = copy.deepcopy(old_cache["data"])
 
                 # Парсинг страницы через HTTP транспорт приложения
                 if not data:
@@ -7411,14 +7412,19 @@ class SelectiveParserWindow(tk.Toplevel):
                 # Распознавание изображений (OCR только при включенной галочке [OCR])
                 if ocr_enabled and data:
                     try:
+                        self.app._log(f"    🖼 [Выборочный] OCR распознавание картинок в «{title}»...", "info")
                         data = enrich_thread_data_with_images(
                             data, self.app.project.dir,
                             cookies=self.app.http.get_cookies(),
                             base_url=url or FORUM_BASE_URL,
                             fetcher=self.app._fetch_image_bytes,
                         )
+                        # v1.33: обновляем кэш проекта новыми данными с OCR
+                        new_chk = compute_content_checksum(data or {})
+                        self.app.project.save_thread_cache(url, data, new_chk, fpo=fpo)
                     except Exception as e:
                         get_logger().warning(f"selective ocr {url}: {e}")
+                        self.app._log(f"    ⚠ [Выборочный] Ошибка OCR в «{title}»: {e}", "warn")
 
                 # Создание и запись .json файла темы в реальном времени
                 fname = safe_name(title) + ".json"
