@@ -110,6 +110,7 @@ def image_block_code():
               "FORUM_BASE_URL", "FORUM_HOST"):
         parts.append(const_line(c))
     parts.append(def_block("_detect_image_ext"))
+    parts.append(def_block("_is_image_or_host_url"))
     parts.append(ocr_gate_code())
     parts.append(def_block("_process_image_block"))
     parts.append(def_block("_process_blocks_with_images"))

@@ -4909,7 +4909,8 @@ def _ocr_image_bytes(data: bytes) -> str:
         from PIL import Image
         import io
         img = Image.open(io.BytesIO(data)).convert("RGB")
-    except Exception:
+    except Exception as e:
+        get_logger().debug(f"OCR PIL open failed: {e}")
         return ""
 
     # Приоритет 1: EasyOCR
@@ -4924,8 +4925,8 @@ def _ocr_image_bytes(data: bytes) -> str:
         if lines:
             _last_ocr_engine = "EasyOCR"
             return "\n".join(lines).strip()
-    except Exception:
-        pass
+    except Exception as e:
+        get_logger().debug(f"OCR EasyOCR error: {e}")
 
     # Приоритет 2: pytesseract
     try:
@@ -4937,10 +4938,42 @@ def _ocr_image_bytes(data: bytes) -> str:
         if txt:
             _last_ocr_engine = "pytesseract"
             return txt
-    except Exception:
-        pass
+    except Exception as e:
+        get_logger().debug(f"OCR pytesseract error: {e}")
+
     _last_ocr_engine = ""
     return ""
+
+_IMAGE_HOSTS = (
+    "ibb.co", "i.ibb.co", "imgur.com", "i.imgur.com",
+    "yapx.ru", "i.yapx.ru", "postimg.cc", "i.postimg.cc",
+    "imgbb.com", "radikal.host", "fastpic.org", "imageban.ru",
+)
+_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".avif")
+
+def _is_image_or_host_url(url: str) -> bool:
+    """Проверяет, является ли ссылка прямой на картинку или ссылку на фотохостинг."""
+    image_hosts = (
+        "ibb.co", "i.ibb.co", "imgur.com", "i.imgur.com",
+        "yapx.ru", "i.yapx.ru", "postimg.cc", "i.postimg.cc",
+        "imgbb.com", "radikal.host", "fastpic.org", "imageban.ru",
+    )
+    image_extensions = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".avif")
+    if not url or not isinstance(url, str):
+        return False
+    try:
+        p = urlparse(url)
+        if not p.scheme or not p.netloc:
+            return False
+        host = p.netloc.lower()
+        if any(h == host or host.endswith("." + h) for h in image_hosts):
+            return True
+        path = p.path.lower()
+        if any(path.endswith(ext) for ext in image_extensions):
+            return True
+    except Exception:
+        pass
+    return False
 
 def _ocr_worth_running(data: bytes) -> bool:
     """Стоит ли гнать движок OCR: отсекает иконки/пустышки (v1.17)."""
@@ -5080,22 +5113,29 @@ def _process_image_block(block: dict, ctx: dict) -> list:
     else:
         if em and s_img:
             em.step_metric(s_img, "detail", "из кэша")
+
+    ocr_text = ""
+    # v1.33: Если кэш OCR уже существует и не пустой — используем его.
+    # Если же он пустой, повторно запускаем распознавание (например, при повторном запуске с установленным движком).
     if ocr_path.exists():
         try:
-            ocr_text = ocr_path.read_text(encoding="utf-8")
+            cached_ocr = ocr_path.read_text(encoding="utf-8").strip()
         except Exception:
-            ocr_text = ""
-        if em and s_img:
-            em.step_metric(s_img, "detail", "OCR из кэша")
-    else:
+            cached_ocr = ""
+        if cached_ocr:
+            ocr_text = cached_ocr
+            if em and s_img:
+                em.step_metric(s_img, "detail", "OCR из кэша")
+
+    if not ocr_text:
         if raw is None:
             try:
                 raw = img_path.read_bytes()
             except Exception:
                 raw = b""
         content_hit = _ocr_lookup_by_content(raw, images_dir) if raw else None
-        if content_hit is not None:
-            ocr_text = content_hit
+        if content_hit is not None and content_hit.strip():
+            ocr_text = content_hit.strip()
             if em and s_img:
                 em.step_metric(s_img, "detail", "OCR по содержимому (дубль)")
         elif not raw or not _ocr_worth_running(raw):
@@ -5112,11 +5152,15 @@ def _process_image_block(block: dict, ctx: dict) -> list:
             elapsed_ocr = time.monotonic() - t_ocr
             if em and s_ocr:
                 em.step_state(s_ocr, "done", f"{elapsed_ocr:.1f}с, {len(ocr_text)} симв.")
-            _ocr_store_by_content(raw, images_dir, ocr_text)
-        try:
-            ocr_path.write_text(ocr_text or "", encoding="utf-8")
-        except Exception:
-            pass
+            if ocr_text and ocr_text.strip():
+                _ocr_store_by_content(raw, images_dir, ocr_text.strip())
+        # v1.33: Записываем в кэш файл только при успешном ненулевом OCR,
+        # чтобы временные сбои или отсутствие библиотек не кэшировались как перманентно пустой OCR.
+        if ocr_text and ocr_text.strip():
+            try:
+                ocr_path.write_text(ocr_text.strip(), encoding="utf-8")
+            except Exception:
+                pass
     if em and s_img:
         em.step_state(s_img, "done", f"OCR: {len(ocr_text)} симв.")
     _res_blocks = [
@@ -5132,18 +5176,37 @@ def _process_image_block(block: dict, ctx: dict) -> list:
     return _res_blocks
 
 def _process_blocks_with_images(blocks: list, ctx: dict) -> list:
-    """Рекурсивно проходит по блокам и заменяет type='image' на текст + OCR."""
+    """Рекурсивно проходит по блокам и заменяет type='image' на текст + OCR.
+    v1.33: Также извлекает прямые ссылки на картинки и популярные хостинги картинок
+    (ibb.co, imgur, yapx и др.) из текста параграфов, чтобы они тоже проходили OCR."""
     out = []
+    _seen_urls = set()
     for b in blocks or []:
         if not isinstance(b, dict):
             continue
         t = b.get("type")
         if t == "image":
-            out.extend(_process_image_block(b, ctx))
+            img_res = _process_image_block(b, ctx)
+            for ib in img_res:
+                if ib.get("src"):
+                    _seen_urls.add(ib["src"])
+            out.extend(img_res)
         elif t in ("quote", "spoiler") and isinstance(b.get("blocks"), list):
             nb = dict(b)
             nb["blocks"] = _process_blocks_with_images(b["blocks"], ctx)
             out.append(nb)
+        elif t == "paragraph":
+            out.append(b)
+            # Проверяем наличие URL изображений/хостингов в тексте параграфа
+            text = b.get("text", "") or ""
+            if "http://" in text or "https://" in text:
+                found_urls = re.findall(r"https?://[^\s<>\"\x27\(\)]+", text)
+                for u in found_urls:
+                    clean_u = u.rstrip(".,;:!?)")
+                    if clean_u and clean_u not in _seen_urls and _is_image_or_host_url(clean_u):
+                        _seen_urls.add(clean_u)
+                        synth_img = {"type": "image", "src": clean_u, "alt": ""}
+                        out.extend(_process_image_block(synth_img, ctx))
         else:
             out.append(b)
     return out

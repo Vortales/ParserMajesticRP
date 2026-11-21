@@ -19,9 +19,6 @@ class TestV133SelectiveParser(unittest.TestCase):
     def test_version_133(self):
         self.assertIn('PARSER_VERSION = "1.33"', SRC)
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_progressbar_and_realtime_json(self):
         self.assertIn("self.progress = ttk.Progressbar", SRC)
         self.assertIn("self._update_progress_ui", SRC)
@@ -31,3 +28,11 @@ if __name__ == "__main__":
         self.assertIn("self.v_skip_docx = tk.BooleanVar(value=False)", SRC)
         self.assertIn("Только .json (без .docx)", SRC)
         self.assertIn("if not skip_docx:", SRC)
+
+    def test_ocr_fixes_and_external_images(self):
+        self.assertIn("def _is_image_or_host_url", SRC)
+        self.assertIn("cached_ocr = ocr_path.read_text(encoding=\"utf-8\").strip()", SRC)
+        self.assertIn("if ocr_text and ocr_text.strip():", SRC)
+
+if __name__ == "__main__":
+    unittest.main()
