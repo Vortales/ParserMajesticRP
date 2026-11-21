@@ -4960,6 +4960,13 @@ def _ocr_image_bytes(data: bytes, diag: dict = None) -> str:
     easyocr_err = None
     try:
         global _EASYOCR_READER
+        # Предотвращаем сбой загрузки весов моделей EasyOCR при отсутствии/сбоях SSL-сертификатов Python в ОС
+        try:
+            import ssl
+            ssl._create_default_https_context = ssl._create_unverified_context
+        except Exception:
+            pass
+
         import easyocr
         import numpy as np
         if _EASYOCR_READER is None:
