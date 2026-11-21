@@ -7382,14 +7382,8 @@ class SelectiveParserWindow(tk.Toplevel):
             done_lock = threading.Lock()
             data_lock = threading.Lock()
 
-            # Читаем промт
-            prompt_text = ""
-            p_file = self.app.project.dir / PROMPT_FILE
-            if p_file.exists():
-                try:
-                    prompt_text = p_file.read_text(encoding="utf-8")
-                except Exception:
-                    pass
+            # Читаем промт через стандартный метод приложения
+            prompt_text = self.app._load_prompt_text()
 
             def parse_one(item):
                 idx, (thr, ocr_enabled) = item
@@ -7445,7 +7439,7 @@ class SelectiveParserWindow(tk.Toplevel):
                     d = done_count[0]
 
                 # Обновление прогресс-бара и статуса в реальном времени в главном потоке GUI
-                self.after(0, lambda d=d, t=title: self._update_progress_ui(d, total, t))
+                self.after(0, self._update_progress_ui, d, total, title)
 
             # Парсим темы в пуле потоков приложения (многопоточно, как на Этапе 3)
             workers_count = self.app.v_workers.get() if hasattr(self.app, "v_workers") else 4
