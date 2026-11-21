@@ -7148,25 +7148,35 @@ class SelectiveParserWindow(tk.Toplevel):
 
         self.tree.bind("<Button-1>", self._on_tree_click)
 
-        # Нижняя панель действий
+        # Нижняя панель действий и прогресс-бар
         bottom = tk.Frame(self, bg=C["panel"], pady=10, padx=12)
         bottom.pack(fill="x")
 
-        self.btn_run = tk.Button(bottom, text="▶ Спарсить выборочно", bg=C["green"], fg="#12121f",
+        b_top = tk.Frame(bottom, bg=C["panel"])
+        b_top.pack(fill="x")
+
+        self.btn_run = tk.Button(b_top, text="▶ Спарсить выборочно", bg=C["green"], fg="#12121f",
                                  activebackground=C["green"], activeforeground="#12121f",
                                  font=("Segoe UI", 10, "bold"), relief="flat", padx=16, pady=6,
                                  cursor="hand2", command=self._do_run)
         self.btn_run.pack(side="left")
 
-        self.btn_cancel = tk.Button(bottom, text="Закрыть", bg=C["panel2"], fg=C["text"],
+        self.btn_cancel = tk.Button(b_top, text="Закрыть", bg=C["panel2"], fg=C["text"],
                                    activebackground=C["panel"], activeforeground=C["text"],
                                    font=("Segoe UI", 9), relief="flat", padx=12, pady=6,
                                    cursor="hand2", command=self._on_close)
         self.btn_cancel.pack(side="left", padx=8)
 
         self.v_status = tk.StringVar(value="Готов к выбору")
-        tk.Label(bottom, textvariable=self.v_status, bg=C["panel"], fg=C["sub"],
+        tk.Label(b_top, textvariable=self.v_status, bg=C["panel"], fg=C["sub"],
                  font=("Segoe UI", 9)).pack(side="right", padx=10)
+
+        # Прогресс-бар реального времени (v1.33)
+        p_frame = tk.Frame(bottom, bg=C["panel"])
+        p_frame.pack(fill="x", pady=(8, 0))
+
+        self.progress = ttk.Progressbar(p_frame, orient="horizontal", mode="determinate")
+        self.progress.pack(fill="x", expand=True)
 
         # Заполняем дерево из структуры
         self._populate_tree()
@@ -7338,7 +7348,9 @@ class SelectiveParserWindow(tk.Toplevel):
         self._abort.clear()
         self.btn_run.config(state="disabled")
         self.btn_cancel.config(text="Прервать")
-        self.v_status.set(f"Парсинг {len(selected)} тем...")
+        self.progress["value"] = 0
+        self.progress["maximum"] = len(selected)
+        self.v_status.set(f"Подготовка к парсингу {len(selected)} тем...")
 
         def worker():
             t0 = time.monotonic()
@@ -7346,8 +7358,12 @@ class SelectiveParserWindow(tk.Toplevel):
             topics_dir.mkdir(parents=True, exist_ok=True)
 
             cached_data = {}
-            lines_for_docx = []
             fpo = self.app.v_fpo.get()
+            total = len(selected)
+
+            done_count = [0]
+            done_lock = threading.Lock()
+            data_lock = threading.Lock()
 
             # Читаем промт
             prompt_text = ""
@@ -7358,21 +7374,21 @@ class SelectiveParserWindow(tk.Toplevel):
                 except Exception:
                     pass
 
-            total = len(selected)
-            for idx, (thr, ocr_enabled) in enumerate(selected):
+            def parse_one(item):
+                idx, (thr, ocr_enabled) = item
                 if self._abort.is_set():
-                    break
+                    return
 
                 title = thr.get("title", "").strip() or "(без названия)"
                 url = thr.get("url", "")
-                self.v_status.set(f"[{idx+1}/{total}] {title[:40]}")
+                norm_u = norm_thread_url(url)
 
                 data = None
-                # Проверяем локальный кэш проекта
                 old_cache = self.app.project.load_thread_cache(url)
                 if old_cache and isinstance(old_cache.get("data"), dict):
                     data = old_cache["data"]
 
+                # Парсинг страницы через HTTP транспорт приложения
                 if not data:
                     try:
                         raw_html = self.app.http.get(url)
@@ -7381,38 +7397,59 @@ class SelectiveParserWindow(tk.Toplevel):
                         get_logger().warning(f"selective parse {url}: {e}")
                         data = {"title": title, "url": url, "posts": []}
 
-                # Обработка изображений (OCR только если включено для данной темы)
+                # Распознавание изображений (OCR только при включенной галочке [OCR])
                 if ocr_enabled and data:
                     try:
                         data = enrich_thread_data_with_images(
                             data, self.app.project.dir,
                             cookies=self.app.http.get_cookies(),
                             base_url=url or FORUM_BASE_URL,
-                            fetcher=self.app.http.fetch_bytes_or_browser,
+                            fetcher=self.app._fetch_image_bytes,
                         )
                     except Exception as e:
                         get_logger().warning(f"selective ocr {url}: {e}")
 
-                # Сохраняем карточку Темы/<Название>.json
+                # Создание и запись .json файла темы в реальном времени
                 fname = safe_name(title) + ".json"
                 json_path = topics_dir / fname
                 try:
-                    payload = build_topic_json(thr, data or {}, is_new=False, layer="selective")
+                    new_chk = compute_content_checksum(data or {})
+                    payload = build_topic_json(thr, data or {}, is_new=False, checksum=new_chk, layer="selective")
                     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+                    self.app._log(f"    💾 [Выборочный] Сохранён JSON: {fname}", "ok")
                 except Exception as e:
                     get_logger().warning(f"selective save json {json_path}: {e}")
 
-                # Строки для итогового документа
-                if data:
+                with data_lock:
+                    cached_data[norm_u] = data
+
+                with done_lock:
+                    done_count[0] += 1
+                    d = done_count[0]
+
+                # Обновление прогресс-бара и статуса в реальном времени в главном потоке GUI
+                self.after(0, lambda d=d, t=title: self._update_progress_ui(d, total, t))
+
+            # Парсим темы в пуле потоков приложения (многопоточно, как на Этапе 3)
+            workers_count = self.app.v_workers.get() if hasattr(self.app, "v_workers") else 4
+            items = list(enumerate(selected))
+            with ThreadPoolExecutor(max_workers=max(1, workers_count)) as pool:
+                list(pool.map(parse_one, items))
+
+            # Формирование итогового clean .docx документа по порядку выбора
+            lines_for_docx = []
+            for thr, _ in selected:
+                u_norm = norm_thread_url(thr.get("url", ""))
+                d_obj = cached_data.get(u_norm)
+                if d_obj:
                     thr_lines = threads_to_lines(
-                        [thr], {norm_thread_url(url): data},
+                        [thr], {u_norm: d_obj},
                         topic_filters=self.app._topic_filters,
                         abbreviations=self.app._abbreviations,
                         telegraph=self.app._telegraph,
                     )
                     lines_for_docx.extend(thr_lines)
 
-            # Формируем итоговый .docx без форматирования (clean-копия)
             docx_path = out_path / docx_fname
             try:
                 doc_gen = build_selective_docx(prompt_text, lines_for_docx)
@@ -7424,20 +7461,24 @@ class SelectiveParserWindow(tk.Toplevel):
 
             dt = time.monotonic() - t0
             self._running = False
-            self.v_status.set(f"Готово за {dt:.1f}с ({total} тем)")
-            self.btn_run.config(state="normal")
-            self.btn_cancel.config(text="Закрыть")
+            self.after(0, lambda: self.v_status.set(f"Готово за {dt:.1f}с ({done_count[0]}/{total} тем)"))
+            self.after(0, lambda: self.btn_run.config(state="normal"))
+            self.after(0, lambda: self.btn_cancel.config(text="Закрыть"))
 
             self.after(100, lambda: messagebox.showinfo(
                 "Выборочный парсер",
                 f"Выборочный парсинг успешно завершён!\n\n"
-                f"Спарсено тем: {total}\n"
+                f"Спарсено тем: {done_count[0]} из {total}\n"
                 f"Папка: {out_path}\n"
                 f"Документ: {docx_fname}"
             ))
             self.after(500, lambda: self.app._open_folder(out_path))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _update_progress_ui(self, done: int, total: int, current_title: str):
+        self.progress["value"] = done
+        self.v_status.set(f"[{done}/{total}] {current_title[:38]}")
 
     def _on_close(self):
         if self._running:

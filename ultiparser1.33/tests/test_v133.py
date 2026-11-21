@@ -21,3 +21,8 @@ class TestV133SelectiveParser(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_progressbar_and_realtime_json(self):
+        self.assertIn("self.progress = ttk.Progressbar", SRC)
+        self.assertIn("self._update_progress_ui", SRC)
+        self.assertIn("compute_content_checksum", SRC)
