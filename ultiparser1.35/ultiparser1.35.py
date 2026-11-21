@@ -69,10 +69,9 @@ HAS_LXML = _ensure("lxml", "lxml", required=False)
 HAS_SELENIUM = _ensure("selenium", "selenium", required=False)
 HAS_PIL = _ensure("PIL", "pillow", required=False)
 HAS_EASYOCR = _ensure("easyocr", "easyocr", required=False)
-HAS_PYTESSERACT = _ensure("pytesseract", "pytesseract", required=False)
 HAS_CRYPTOGRAPHY = _ensure("cryptography", "cryptography", required=False)
 if not (HAS_REQUESTS and HAS_BS4 and HAS_DOCX):
-    print("\n❌ pip install requests beautifulsoup4 python-docx lxml selenium pillow easyocr pytesseract")
+    print("\n❌ pip install requests beautifulsoup4 python-docx lxml selenium pillow easyocr")
     sys.exit(1)
 
 import requests
@@ -4957,17 +4956,20 @@ def _ocr_image_bytes(data: bytes, diag: dict = None) -> str:
         get_logger().debug(f"OCR PIL open failed: {e}")
         return ""
 
-    # Проверка доступности движков
+    # Распознавание текста через EasyOCR
     easyocr_err = None
-    tess_err = None
-
-    # Приоритет 1: EasyOCR
     try:
         global _EASYOCR_READER
         import easyocr
         import numpy as np
         if _EASYOCR_READER is None:
-            _EASYOCR_READER = easyocr.Reader(["ru", "en"], verbose=False, gpu=True)
+            try:
+                # Попытка инициализации с GPU (если доступен CUDA)
+                _EASYOCR_READER = easyocr.Reader(["ru", "en"], verbose=False, gpu=True)
+            except Exception:
+                # Фолбэк на CPU при отсутствии/ошибке CUDA
+                _EASYOCR_READER = easyocr.Reader(["ru", "en"], verbose=False, gpu=False)
+
         result = _EASYOCR_READER.readtext(np.array(img), detail=0, paragraph=True)
         lines = [str(x).strip() for x in (result or []) if str(x).strip()]
         if lines:
@@ -4981,33 +4983,10 @@ def _ocr_image_bytes(data: bytes, diag: dict = None) -> str:
         diag["easyocr_error"] = easyocr_err
         get_logger().debug(f"OCR EasyOCR error: {e}")
 
-    # Приоритет 2: pytesseract
-    try:
-        import pytesseract
-        try:
-            txt = pytesseract.image_to_string(img, lang="rus+eng").strip()
-        except Exception:
-            txt = pytesseract.image_to_string(img).strip()
-        if txt:
-            _last_ocr_engine = "pytesseract"
-            diag["engine"] = "pytesseract"
-            return txt
-        else:
-            diag["pytesseract_empty"] = True
-    except Exception as e:
-        tess_err = str(e)
-        diag["pytesseract_error"] = tess_err
-        get_logger().debug(f"OCR pytesseract error: {e}")
-
     _last_ocr_engine = ""
-    errs = []
     if easyocr_err:
-        errs.append(f"EasyOCR: {easyocr_err}")
-    if tess_err:
-        errs.append(f"pytesseract: {tess_err}")
-    if errs:
-        diag["error"] = "; ".join(errs)
-    elif diag.get("easyocr_empty") or diag.get("pytesseract_empty"):
+        diag["error"] = f"EasyOCR: {easyocr_err}"
+    elif diag.get("easyocr_empty"):
         diag["error"] = "no_text_found_by_engines"
     else:
         diag["error"] = "no_ocr_engines_available"
@@ -5043,6 +5022,7 @@ def _is_image_or_host_url(url: str) -> bool:
     except Exception:
         pass
     return False
+
 
 def _ocr_worth_running(data: bytes) -> bool:
     """Стоит ли гнать движок OCR: отсекает иконки/пустышки (v1.17)."""

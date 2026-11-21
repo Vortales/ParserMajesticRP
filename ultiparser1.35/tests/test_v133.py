@@ -32,7 +32,7 @@ class TestV133SelectiveParser(unittest.TestCase):
     def test_ocr_fixes_and_external_images(self):
         self.assertIn("import copy", SRC)
         self.assertIn("HAS_EASYOCR = _ensure(\"easyocr\", \"easyocr\", required=False)", SRC)
-        self.assertIn("HAS_PYTESSERACT = _ensure(\"pytesseract\", \"pytesseract\", required=False)", SRC)
+        # pytesseract removed in v1.35
         self.assertIn("def _is_image_or_host_url", SRC)
         self.assertIn("cached_ocr = ocr_path.read_text(encoding=\"utf-8\").strip()", SRC)
         self.assertIn("if ocr_text and ocr_text.strip():", SRC)
