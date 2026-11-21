@@ -1,5 +1,6 @@
 import io
 import os
+import copy
 import base64
 import re
 import sys
@@ -67,8 +68,11 @@ HAS_DOCX = _ensure("docx", "python-docx")
 HAS_LXML = _ensure("lxml", "lxml", required=False)
 HAS_SELENIUM = _ensure("selenium", "selenium", required=False)
 HAS_PIL = _ensure("PIL", "pillow", required=False)
+HAS_EASYOCR = _ensure("easyocr", "easyocr", required=False)
+HAS_PYTESSERACT = _ensure("pytesseract", "pytesseract", required=False)
+HAS_CRYPTOGRAPHY = _ensure("cryptography", "cryptography", required=False)
 if not (HAS_REQUESTS and HAS_BS4 and HAS_DOCX):
-    print("\n❌ pip install requests beautifulsoup4 python-docx lxml selenium")
+    print("\n❌ pip install requests beautifulsoup4 python-docx lxml selenium pillow easyocr pytesseract")
     sys.exit(1)
 
 import requests
