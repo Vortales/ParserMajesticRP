@@ -7189,14 +7189,14 @@ class SelectiveParserWindow(tk.Toplevel):
         self._nmap.clear()
         self._thread_map.clear()
 
-        def add_node(node: Node, parent_iid=""):
-            icon = ICONS[min(node.depth, len(ICONS) - 1)]
+        def add_node(node: Node, parent_iid="", depth=0):
+            icon = ICONS[min(depth, len(ICONS) - 1)]
             thr_count = len(node.threads or [])
             iid = self.tree.insert(
                 parent_iid, "end",
-                text=f"{icon} {node.title}",
+                text=f"{icon}  {node.title}",
                 values=("☐", "☐", str(thr_count) if thr_count else ""),
-                open=False
+                open=(depth < 2)
             )
             self._checks[iid] = tk.BooleanVar(value=False)
             self._ocr_checks[iid] = tk.BooleanVar(value=False)
@@ -7206,9 +7206,10 @@ class SelectiveParserWindow(tk.Toplevel):
             for idx, t in enumerate(node.threads or []):
                 t_iid = f"SEL_THR::{iid}::{idx}"
                 t_title = t.get("title", "").strip() or "(без названия)"
+                sticky = "📌 " if t.get("sticky") else ""
                 self.tree.insert(
                     iid, "end", iid=t_iid,
-                    text=f"📄 {t_title}",
+                    text=f"📄  {sticky}{t_title}",
                     values=("☐", "☐", ""),
                     open=False
                 )
@@ -7217,10 +7218,10 @@ class SelectiveParserWindow(tk.Toplevel):
                 self._thread_map[t_iid] = (t, node)
 
             for child in (node.children or []):
-                add_node(child, iid)
+                add_node(child, iid, depth + 1)
 
         for root_node in (self.app.nodes or []):
-            add_node(root_node, "")
+            add_node(root_node, "", 0)
 
         self._update_counter()
 
