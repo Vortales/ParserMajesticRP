@@ -26,3 +26,8 @@ if __name__ == "__main__":
         self.assertIn("self.progress = ttk.Progressbar", SRC)
         self.assertIn("self._update_progress_ui", SRC)
         self.assertIn("compute_content_checksum", SRC)
+
+    def test_skip_docx_option(self):
+        self.assertIn("self.v_skip_docx = tk.BooleanVar(value=False)", SRC)
+        self.assertIn("Только .json (без .docx)", SRC)
+        self.assertIn("if not skip_docx:", SRC)

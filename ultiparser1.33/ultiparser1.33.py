@@ -7096,16 +7096,25 @@ class SelectiveParserWindow(tk.Toplevel):
                                command=self._browse_dir)
         btn_browse.pack(side="left")
 
-        # Строка 2: Имя .docx файла
+        # Строка 2: Имя .docx файла и опция исключения создания .docx
         r2 = tk.Frame(top, bg=C["panel"])
         r2.pack(fill="x", pady=4)
         tk.Label(r2, text="📄 Имя .docx файла:", bg=C["panel"], fg=C["text"],
                  font=("Segoe UI", 9, "bold"), width=18, anchor="w").pack(side="left")
         self.v_docx_name = tk.StringVar(value="Выборочный результат.docx")
-        e_docx = tk.Entry(r2, textvariable=self.v_docx_name, bg=C["entry"], fg=C["text"],
-                          insertbackground=C["text"], relief="flat", highlightthickness=1,
-                          highlightbackground=C["border"], font=("Segoe UI", 9))
-        e_docx.pack(side="left", fill="x", expand=True, padx=(4, 6))
+        self.e_docx = tk.Entry(r2, textvariable=self.v_docx_name, bg=C["entry"], fg=C["text"],
+                               insertbackground=C["text"], relief="flat", highlightthickness=1,
+                               highlightbackground=C["border"], font=("Segoe UI", 9))
+        self.e_docx.pack(side="left", fill="x", expand=True, padx=(4, 6))
+
+        self.v_skip_docx = tk.BooleanVar(value=False)
+        chk_skip_docx = tk.Checkbutton(
+            r2, text="Только .json (без .docx)", variable=self.v_skip_docx,
+            bg=C["panel"], fg=C["accent2"], activebackground=C["panel"],
+            activeforeground=C["accent"], selectcolor=C["panel2"],
+            font=("Segoe UI", 9, "bold"), cursor="hand2", command=self._on_toggle_skip_docx
+        )
+        chk_skip_docx.pack(side="left", padx=(4, 0))
 
         # Панель быстрых кнопок выбора
         btn_bar = tk.Frame(self, bg=C["panel2"], pady=6, padx=12)
@@ -7185,6 +7194,12 @@ class SelectiveParserWindow(tk.Toplevel):
         return tk.Button(parent, text=text, command=cmd, bg=bg_col, fg=C["text"] if bg_col != C["green"] else "#12121f",
                          activebackground=C["accent"], activeforeground="#ffffff",
                          font=("Segoe UI", 8, "bold"), relief="flat", padx=8, pady=3, cursor="hand2")
+
+    def _on_toggle_skip_docx(self):
+        if self.v_skip_docx.get():
+            self.e_docx.config(state="disabled")
+        else:
+            self.e_docx.config(state="normal")
 
     def _browse_dir(self):
         d = filedialog.askdirectory(parent=self, title="Выберите папку для сохранения",
@@ -7336,6 +7351,8 @@ class SelectiveParserWindow(tk.Toplevel):
         if not docx_fname.lower().endswith(".docx"):
             docx_fname += ".docx"
 
+        skip_docx = bool(self.v_skip_docx.get())
+
         selected = self._collect_selected_threads()
         if not selected:
             messagebox.showinfo(
@@ -7436,28 +7453,31 @@ class SelectiveParserWindow(tk.Toplevel):
             with ThreadPoolExecutor(max_workers=max(1, workers_count)) as pool:
                 list(pool.map(parse_one, items))
 
-            # Формирование итогового clean .docx документа по порядку выбора
-            lines_for_docx = []
-            for thr, _ in selected:
-                u_norm = norm_thread_url(thr.get("url", ""))
-                d_obj = cached_data.get(u_norm)
-                if d_obj:
-                    thr_lines = threads_to_lines(
-                        [thr], {u_norm: d_obj},
-                        topic_filters=self.app._topic_filters,
-                        abbreviations=self.app._abbreviations,
-                        telegraph=self.app._telegraph,
-                    )
-                    lines_for_docx.extend(thr_lines)
+            # Формирование итогового clean .docx документа по порядку выбора (если не отключено)
+            if not skip_docx:
+                lines_for_docx = []
+                for thr, _ in selected:
+                    u_norm = norm_thread_url(thr.get("url", ""))
+                    d_obj = cached_data.get(u_norm)
+                    if d_obj:
+                        thr_lines = threads_to_lines(
+                            [thr], {u_norm: d_obj},
+                            topic_filters=self.app._topic_filters,
+                            abbreviations=self.app._abbreviations,
+                            telegraph=self.app._telegraph,
+                        )
+                        lines_for_docx.extend(thr_lines)
 
-            docx_path = out_path / docx_fname
-            try:
-                doc_gen = build_selective_docx(prompt_text, lines_for_docx)
-                doc_gen.save(docx_path, clean=True)
-                self.app._log(f"✅ [Выборочный] Документ сохранён: {docx_path}", "ok")
-            except Exception as e:
-                get_logger().error(f"selective docx save error: {e}")
-                self.app._log(f"❌ [Выборочный] Ошибка сохранения .docx: {e}", "err")
+                docx_path = out_path / docx_fname
+                try:
+                    doc_gen = build_selective_docx(prompt_text, lines_for_docx)
+                    doc_gen.save(docx_path, clean=True)
+                    self.app._log(f"✅ [Выборочный] Документ сохранён: {docx_path}", "ok")
+                except Exception as e:
+                    get_logger().error(f"selective docx save error: {e}")
+                    self.app._log(f"❌ [Выборочный] Ошибка сохранения .docx: {e}", "err")
+            else:
+                self.app._log("ℹ [Выборочный] Создание .docx пропущено (режим: только .json)", "info")
 
             dt = time.monotonic() - t0
             self._running = False
@@ -7465,12 +7485,13 @@ class SelectiveParserWindow(tk.Toplevel):
             self.after(0, lambda: self.btn_run.config(state="normal"))
             self.after(0, lambda: self.btn_cancel.config(text="Закрыть"))
 
+            doc_info = f"Документ: {docx_fname}" if not skip_docx else "Создание .docx: отключено (только .json)"
             self.after(100, lambda: messagebox.showinfo(
                 "Выборочный парсер",
                 f"Выборочный парсинг успешно завершён!\n\n"
                 f"Спарсено тем: {done_count[0]} из {total}\n"
                 f"Папка: {out_path}\n"
-                f"Документ: {docx_fname}"
+                f"{doc_info}"
             ))
             self.after(500, lambda: self.app._open_folder(out_path))
 
