@@ -11624,7 +11624,7 @@ class App(tk.Tk):
                 em.step_state(s_prune, "done", f"удалено: {_pruned}")
                 self._log(f"🏁 Готово! {plural(ok_count, 'Файл', 'Файла', 'Файлов')}: {ok_count}", "ok")
                 total_dur = time.monotonic() - t0
-                self._status(f"✅ Готово. {plural(ok_count, Файл, Файла, Файлов)}: {ok_count}")
+                self._status(f"✅ Готово. {plural(ok_count, 'Файл', 'Файла', 'Файлов')}: {ok_count}")
                 get_logger().info(f"[STAGE3] [SUMMARY] Успешно сформировано {ok_count} документов за {total_dur:.2f}с")
                 unified_telemetry_event("stage3", "summary", ok_count=ok_count, total_duration_sec=total_dur)
                 em.process_finished("done", total_dur)
