@@ -77,7 +77,7 @@ BS_PARSER = "lxml" if HAS_LXML else "html.parser"
 print(f"✅ Готово (парсер: {BS_PARSER})\n")
 
 
-SERVERS_ROOT = Path("ServerParser").absolute()
+SERVERS_ROOT = Path("ultiparser1.14").absolute()
 STRUCTURE_FILE = "structure.json"
 CONFIG_FILE = "config.json"
 COOKIES_FILE = "cookies.json"
