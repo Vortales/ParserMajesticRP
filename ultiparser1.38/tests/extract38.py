@@ -184,6 +184,7 @@ def docx_code():
     parts = []
     for c in ("DOC_FONT", "DOC_SIZE", "DOC_LS", "DOC_MARGIN"):
         parts.append(const_line(c))
+    parts.append(def_block("strip_box_drawing_chars"))
     parts.append(def_block("normalize_text"))
     parts.append(grab("def _remove_rsid_attrs", "def build_server_docx"))
     parts.append(grab("def build_server_docx", "class Project"))

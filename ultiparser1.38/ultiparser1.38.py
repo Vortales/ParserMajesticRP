@@ -2299,9 +2299,21 @@ def extract_posts(soup: BeautifulSoup, base: str = ""):
         if not body:
             continue
 
+        # v1.38: Сбор всех ссылок на темы из <a> тегов внутри тела сообщения
+        raw_thread_links = []
+        for tag_a in body.find_all("a"):
+            href = (tag_a.get("href") or "").strip()
+            if href:
+                full_href = urljoin(base, href) if base else href
+                if "/threads/" in full_href.lower():
+                    raw_thread_links.append(full_href)
+
         blocks = body_to_blocks(body, base=base)
         if blocks:
-            out.append({"author": author, "date": date, "blocks": blocks})
+            post_dict = {"author": author, "date": date, "blocks": blocks}
+            if raw_thread_links:
+                post_dict["thread_links"] = raw_thread_links
+            out.append(post_dict)
 
     return out
 
@@ -7718,31 +7730,81 @@ class SelectiveParserWindow(tk.Toplevel):
         def _is_forum_thread_url(raw_url: str) -> bool:
             if not raw_url:
                 return False
-            u_clean = raw_url.split("?")[0].split("#")[0].lower()
-            if "/threads/" not in u_clean:
+            u = raw_url.strip()
+            if u.startswith("/"):
+                u = urljoin(FORUM_BASE_URL, u)
+            elif not u.startswith(("http://", "https://")):
+                u = "https://" + u
+            try:
+                parsed = urlparse(u)
+            except Exception:
                 return False
-            if is_bad_url(raw_url)[0]:
+            if parsed.netloc and FORUM_HOST not in parsed.netloc.lower():
                 return False
+            path = parsed.path.lower()
+            if "/threads/" not in path:
+                return False
+            bad_suffixes = ("/post-thread", "/create-thread", "/watch", "/unread", "/latest", "/mark-read")
+            for bs in bad_suffixes:
+                if path.rstrip("/").endswith(bs):
+                    return False
             return True
 
         def _extract_thread_links_from_data(t_data: dict) -> list[str]:
             found_urls = []
             if not t_data or not isinstance(t_data.get("posts"), list):
                 return found_urls
-            for p in t_data.get("posts", []):
-                for b in p.get("blocks", []):
+
+            def _check_and_add(raw_u: str):
+                if not raw_u:
+                    return
+                u_str = raw_u.strip()
+                if u_str.startswith("/"):
+                    u_str = urljoin(FORUM_BASE_URL, u_str)
+                if _is_forum_thread_url(u_str):
+                    found_urls.append(u_str)
+
+            def _walk_blocks(blocks_list):
+                if not isinstance(blocks_list, list):
+                    return
+                for b in blocks_list:
                     if not isinstance(b, dict):
                         continue
+                    # 1. Прямой атрибут link_url (вшитая гиперссылка в блоке)
                     lu = (b.get("link_url") or "").strip()
-                    if lu and _is_forum_thread_url(lu):
-                        found_urls.append(lu)
-                    txt = b.get("text", "") or ""
-                    if "/threads/" in txt:
-                        urls = re.findall(r"https?://[^\s<>\"\'\(\)\[\]]+", txt)
-                        for u in urls:
-                            clean_u = u.rstrip(".,;:!?)")
-                            if _is_forum_thread_url(clean_u):
-                                found_urls.append(clean_u)
+                    if lu:
+                        _check_and_add(lu)
+
+                    # 2. Текст блока: ищем [сноска: URL], а также любые http(s):// и /threads/
+                    txt = (b.get("text") or "").strip()
+                    if txt:
+                        # Извлекаем ссылки из формата сносок: текст [сноска: URL]
+                        footnotes = re.findall(r"\[сноска:\s*([^\]\s]+)\]", txt)
+                        for fn in footnotes:
+                            _check_and_add(fn)
+
+                        # Извлекаем открытые http/https ссылки
+                        if "/threads/" in txt:
+                            urls = re.findall(r"https?://[^\s<>\"\'\(\)\[\]]+", txt)
+                            for u in urls:
+                                _check_and_add(u.rstrip(".,;:!?)"))
+
+                            # Относительные ссылки /threads/... в тексте
+                            rel_urls = re.findall(r"(?:^|[\s\"\'\(])(/threads/[^\s<>\"\'\(\)\[\]]+)", txt)
+                            for ru in rel_urls:
+                                _check_and_add(ru.rstrip(".,;:!?)"))
+
+                    # 3. Рекурсивный обход вложенных блоков (спойлеры, цитаты, контейнеры)
+                    if isinstance(b.get("blocks"), list):
+                        _walk_blocks(b.get("blocks"))
+
+            for p in t_data.get("posts", []):
+                if not isinstance(p, dict):
+                    continue
+                _walk_blocks(p.get("blocks", []))
+                for tl in p.get("thread_links", []):
+                    _check_and_add(tl)
+
             seen_u = set()
             res = []
             for u in found_urls:

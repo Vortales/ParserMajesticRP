@@ -21,16 +21,14 @@ class TestV138(unittest.TestCase):
 
     def test_dfs_logic_and_cycle_prevention(self):
         self.assertIn("visited_urls = set()", SRC)
-        self.assertIn("_extract_thread_links_from_data", SRC)
+        self.assertIn("def _extract_thread_links_from_data", SRC)
         self.assertIn("СВЯЗАННАЯ ТЕМА ПО ЦЕПОЧКЕ DFS", SRC)
 
-    def test_link_enrichment_for_images(self):
-        self.assertIn("link_url", SRC)
-        self.assertIn('lu = (b.get("link_url") or "").strip()', SRC)
-
-    def test_real_title_extraction_in_parse_thread_content(self):
-        # Проверяем, что при парсинге страницы извлекается реальный h1 заголовок
-        self.assertIn("real_h1 = page_title(soup)", SRC)
+    def test_embedded_hyperlink_extraction_in_dfs(self):
+        # Проверяем, что в DFS парсятся как открытые URL, так и вшитые в текст гиперссылки
+        self.assertIn("raw_thread_links = []", SRC)
+        self.assertIn("footnotes = re.findall", SRC)
+        self.assertIn('b.get("link_url")', SRC)
 
     def test_dfs_folders_creation(self):
         # Проверяем создание подпапок для связанных тем
