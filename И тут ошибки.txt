@@ -1,0 +1,2 @@
+self.after(0, lambda: self.v_status.set(f"Готово за {dt:.1f}с ({done_count[0]}/{total} тем)")) Unresolved reference 'total'
+f"Спарсено тем: {done_count[0]} из {total}\n"Unresolved reference 'total'
