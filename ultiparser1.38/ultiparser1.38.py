@@ -7863,28 +7863,21 @@ class SelectiveParserWindow(tk.Toplevel):
                 url = thr.get("url", "")
                 norm_u = norm_thread_url(url)
 
+                # v1.38: Выборочный парсер всегда парсит напрямую с форума (минуя старый кэш)
                 data = None
-                old_cache = self.app.project.load_thread_cache(url)
-                if old_cache and isinstance(old_cache.get("data"), dict):
-                    data = copy.deepcopy(old_cache["data"])
-                    if data.get("title"):
+                try:
+                    prefix = f"    📄 [Выборочный/DFS-{depth}]" if is_child else "    📄 [Выборочный]"
+                    self.app._log(f"{prefix} Прямая загрузка с форума темы: «{title}»...", "debug")
+                    raw_html = self.app.http.get(url)
+                    data = parse_thread_content(self.app.http, thr, fpo, initial_html=raw_html)
+                    if data and data.get("title"):
                         title = data["title"]
                         thr["title"] = title
-
-                if not data:
-                    try:
-                        prefix = f"    📄 [Выборочный/DFS-{depth}]" if is_child else "    📄 [Выборочный]"
-                        self.app._log(f"{prefix} Загрузка контента темы: «{title}»...", "debug")
-                        raw_html = self.app.http.get(url)
-                        data = parse_thread_content(self.app.http, thr, fpo, initial_html=raw_html)
-                        if data and data.get("title"):
-                            title = data["title"]
-                            thr["title"] = title
-                        elif data and not data.get("title"):
-                            data["title"] = title
-                    except Exception as e:
-                        get_logger().warning(f"selective parse {url}: {e}")
-                        data = {"title": title, "url": url, "posts": []}
+                    elif data and not data.get("title"):
+                        data["title"] = title
+                except Exception as e:
+                    get_logger().warning(f"selective direct parse {url}: {e}")
+                    data = {"title": title, "url": url, "posts": []}
 
                 if ocr_enabled and data:
                     try:

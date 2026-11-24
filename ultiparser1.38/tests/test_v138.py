@@ -40,6 +40,15 @@ class TestV138(unittest.TestCase):
         self.assertIn("self._update_progress_ui(d, tot, t_name)", SRC)
         self.assertIn("cur_total = total_counter[0]", SRC)
 
+    def test_selective_always_direct_parse(self):
+        # Проверяем, что выборочный парсер всегда парсит напрямую с форума
+        self.assertIn("Прямая загрузка с форума темы:", SRC)
+        # Убеждаемся, что в SelectiveParserWindow нет вызова load_thread_cache
+        pos_spw = SRC.find("class SelectiveParserWindow")
+        pos_end_spw = SRC.find("class TopicFilterWindow", pos_spw)
+        spw_body = SRC[pos_spw:pos_end_spw]
+        self.assertNotIn("load_thread_cache", spw_body)
+
 
 if __name__ == "__main__":
     unittest.main()
