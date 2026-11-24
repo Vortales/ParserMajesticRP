@@ -30,6 +30,12 @@ class TestV138(unittest.TestCase):
         self.assertIn("footnotes = re.findall", SRC)
         self.assertIn('b.get("link_url")', SRC)
 
+    def test_inline_hyperlink_preservation_in_blocks(self):
+        # Проверяем корректное встраивание гиперссылок внутрь текста фраз без разрыва строк
+        self.assertIn("walk_inline", SRC)
+        self.assertIn("extract_single_image_block", SRC)
+        self.assertIn("[сноска: {href}]", SRC)
+
     def test_dfs_folders_creation(self):
         # Проверяем создание подпапок для связанных тем
         self.assertIn("next_save_dir = topics_dir / safe_name(title)", SRC)

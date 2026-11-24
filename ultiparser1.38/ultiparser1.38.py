@@ -2317,14 +2317,6 @@ def extract_posts(soup: BeautifulSoup, base: str = ""):
 
     return out
 
-def body_to_blocks(body: Tag, base: str = ""):
-    out = []
-    for el in body.children:
-        r = el_to_blocks(el, base=base)
-        if r:
-            out += r if isinstance(r, list) else [r]
-    return out
-
 def _extract_real_image_url(src: str, data_url: str, data_src: str, data_original: str, base: str) -> str:
     """
     Извлекает реальный URL изображения, учитывая XenForo-прокси и data-атрибуты.
@@ -2380,7 +2372,215 @@ def _extract_real_image_url(src: str, data_url: str, data_src: str, data_origina
     return ""
 
 
+def extract_single_image_block(el, base: str = ""):
+    cls = el.get("class", [])
+    cls_txt = " ".join(cls).lower()
+    if any(x in cls_txt for x in (
+        "smilie", "emoji", "bbcode-smiley", "smiley", "mce-emoticon"
+    )):
+        return None
+
+    try:
+        w = int(el.get("width") or 0)
+        h = int(el.get("height") or 0)
+        if 0 < w <= 40 and 0 < h <= 40:
+            return None
+    except Exception:
+        pass
+
+    src           = (el.get("src")           or "").strip()
+    data_url      = (el.get("data-url")      or "").strip()
+    data_src      = (el.get("data-src")      or "").strip()
+    data_original = (el.get("data-original") or "").strip()
+    alt           = (el.get("alt")           or "").strip()
+
+    real_url = _extract_real_image_url(
+        src, data_url, data_src, data_original, base
+    )
+
+    if real_url:
+        if real_url.startswith("//"):
+            real_url = "https:" + real_url
+        return {
+            "type": "image",
+            "src": real_url.split("#")[0],
+            "alt": alt,
+            "original_src": src,
+        }
+
+    if alt and 1 < len(alt) < 200:
+        return {"type": "paragraph", "text": f"[ALT: {alt}]"}
+
+    return None
+
+
+def body_to_blocks(body: Tag, base: str = ""):
+    """
+    v1.38: Собирает блоки контента сообщения, сохраняя связность инлайн-текста.
+    В XenForo абзацы формируются инлайн-потоками (текст, ссылки <a>, форматирование <b>/<i>/<span>),
+    разделёнными тегами <br/> и блочными тегами (заголовки, цитаты, спойлеры, таблицы).
+    Гиперссылки не разрывают предложение на отдельные строки, а встраиваются непосредственно
+    в текст фразы в формате: «текст ссылки [сноска: URL]».
+    """
+    blocks = []
+    curr_line_parts = []
+    curr_line_links = []
+    curr_line_images = []
+
+    def flush_line():
+        nonlocal curr_line_parts, curr_line_links, curr_line_images
+        text = "".join(curr_line_parts).strip()
+        curr_line_parts = []
+        links = list(curr_line_links)
+        curr_line_links = []
+        images = list(curr_line_images)
+        curr_line_images = []
+
+        text = re.sub(r"[\u200b\u200c\u200d\u200e\u200f\ufeff]", "", text)
+        text = re.sub(r"[ \t]+", " ", text).strip()
+
+        if text:
+            b = {"type": "paragraph", "text": text}
+            if links:
+                b["link_url"] = links[0]
+                b["link_text"] = links[0]
+                if len(links) > 1:
+                    b["links"] = links
+            blocks.append(b)
+
+        for img in images:
+            blocks.append(img)
+
+    def walk_inline(node):
+        if isinstance(node, NavigableString):
+            curr_line_parts.append(str(node))
+            return
+        if not isinstance(node, Tag):
+            return
+        tag = node.name.lower()
+        if tag in ("script", "style", "noscript"):
+            return
+        if tag == "br":
+            flush_line()
+            return
+        if tag == "img":
+            img_b = extract_single_image_block(node, base=base)
+            if img_b:
+                curr_line_images.append(img_b)
+            return
+        if tag == "a":
+            img_inside = node.find("img")
+            if img_inside:
+                img_b = extract_single_image_block(img_inside, base=base)
+                if img_b:
+                    curr_line_images.append(img_b)
+                    return
+            href = (node.get("href") or "").strip()
+            link_text = node.get_text(strip=True)
+            if base and href:
+                href = urljoin(base, href)
+            if href.startswith("//"):
+                href = "https:" + href
+            if not link_text and not href:
+                return
+            if not link_text and href.startswith("#"):
+                return
+            if not link_text:
+                curr_line_parts.append(href)
+                curr_line_links.append(href)
+            elif link_text == href or not href:
+                curr_line_parts.append(link_text)
+                if href:
+                    curr_line_links.append(href)
+            else:
+                curr_line_parts.append(f"{link_text} [сноска: {href}]")
+                curr_line_links.append(href)
+            return
+
+        for ch in node.children:
+            walk_inline(ch)
+
+    for ch in body.children:
+        if isinstance(ch, Tag):
+            tag = ch.name.lower()
+            cls = ch.get("class", [])
+            cls_txt = " ".join(cls).lower()
+
+            if tag in ("script", "style", "noscript"):
+                continue
+            if tag == "br":
+                flush_line()
+                continue
+            if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+                flush_line()
+                h_text = ch.get_text(strip=True)
+                h_text = re.sub(r"[\u200b\u200c\u200d\u200e\u200f\ufeff]", "", h_text).strip()
+                if h_text:
+                    blocks.append({"type": "heading", "text": h_text})
+                continue
+            if tag == "hr":
+                flush_line()
+                blocks.append({"type": "divider"})
+                continue
+            if tag in ("code", "pre"):
+                flush_line()
+                c_text = ch.get_text()
+                if c_text:
+                    blocks.append({"type": "code", "text": c_text})
+                continue
+            if tag in ("ul", "ol"):
+                flush_line()
+                for li in ch.select("li"):
+                    li_txt = li.get_text(strip=True)
+                    if li_txt:
+                        blocks.append({"type": "list_item", "text": li_txt})
+                continue
+            if tag == "table":
+                flush_line()
+                rows = []
+                for tr in ch.select("tr"):
+                    cells = [td.get_text(strip=True) for td in tr.select("td, th")]
+                    if any(cells):
+                        rows.append(cells)
+                if rows:
+                    blocks.append({"type": "table", "rows": rows})
+                continue
+            if any("spoiler" in c.lower() for c in cls):
+                flush_line()
+                ct = ch.select_one(".bbCodeBlock-title, .bbCodeSpoiler-button")
+                cc = ch.select_one(".bbCodeBlock-content, .bbCodeSpoiler-content")
+                blocks.append({
+                    "type": "spoiler",
+                    "title": ct.get_text(strip=True) if ct else "Спойлер",
+                    "blocks": body_to_blocks(cc, base=base) if cc else [],
+                })
+                continue
+            if any("quote" in c.lower() for c in cls):
+                flush_line()
+                ct = ch.select_one(".bbCodeBlock-title")
+                cc = ch.select_one(".bbCodeBlock-content")
+                blocks.append({
+                    "type": "quote",
+                    "author": ct.get_text(strip=True) if ct else "",
+                    "blocks": body_to_blocks(cc, base=base) if cc else [],
+                })
+                continue
+
+            has_blocks = bool(ch.find(["h1", "h2", "h3", "h4", "h5", "h6", "table", "hr", "ul", "ol", "code", "pre", "blockquote"]))
+            if has_blocks:
+                flush_line()
+                sub = body_to_blocks(ch, base=base)
+                blocks.extend(sub)
+                continue
+
+        walk_inline(ch)
+
+    flush_line()
+    return blocks
+
+
 def el_to_blocks(el, base: str = ""):
+    """Обратная совместимость: преобразует отдельный элемент в список блоков."""
     if isinstance(el, NavigableString):
         t = str(el).strip()
         return {"type": "paragraph", "text": t} if t else None
@@ -2388,144 +2588,12 @@ def el_to_blocks(el, base: str = ""):
     if not isinstance(el, Tag):
         return None
 
-    tag = el.name.lower()
-    cls = el.get("class", [])
-    cls_txt = " ".join(cls).lower()
+    container = Tag(name="div")
+    container.append(el)
+    return body_to_blocks(container, base=base)
 
-    if tag in ("script", "style", "noscript", "br"):
-        return None
 
-    if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
-        t = el.get_text(strip=True)
-        return {"type": "heading", "text": t} if t else None
 
-    if tag == "hr":
-        return {"type": "divider"}
-
-    # ═══════════════════════════════════════════════════════
-    #  ИЗОБРАЖЕНИЯ — полностью переработано под XenForo
-    # ═══════════════════════════════════════════════════════
-    if tag == "img":
-        # Смайлики/эмодзи пропускаем — их не нужно распознавать
-        if any(x in cls_txt for x in (
-            "smilie", "emoji", "bbcode-smiley", "smiley", "mce-emoticon"
-        )):
-            return None
-
-        # Совсем маленькие картинки — иконки/смайлики
-        try:
-            w = int(el.get("width") or 0)
-            h = int(el.get("height") or 0)
-            if 0 < w <= 40 and 0 < h <= 40:
-                return None
-        except Exception:
-            pass
-
-        src           = (el.get("src")           or "").strip()
-        data_url      = (el.get("data-url")      or "").strip()
-        data_src      = (el.get("data-src")      or "").strip()
-        data_original = (el.get("data-original") or "").strip()
-        alt           = (el.get("alt")           or "").strip()
-
-        real_url = _extract_real_image_url(
-            src, data_url, data_src, data_original, base
-        )
-
-        if real_url:
-            # Нормализуем: убираем #fragment
-            if real_url.startswith("//"):
-                real_url = "https:" + real_url
-            return {
-                "type": "image",
-                "src": real_url.split("#")[0],
-                "alt": alt,
-                "original_src": src,
-            }
-
-        # Если URL извлечь не удалось — возвращаем alt как текст
-        if alt and 1 < len(alt) < 200:
-            return {"type": "paragraph", "text": f"[ALT: {alt}]"}
-
-        return None
-
-    if tag in ("code", "pre"):
-        return {"type": "code", "text": el.get_text()}
-
-    if tag in ("ul", "ol"):
-        return [
-            {"type": "list_item", "text": li.get_text(strip=True)}
-            for li in el.select("li") if li.get_text(strip=True)
-        ]
-
-    # v1.38: Обработка тега ссылки <a> (сноска для гиперссылок)
-    if tag == "a":
-        href = (el.get("href") or "").strip()
-        link_text = el.get_text(strip=True)
-        if base and href:
-            href = urljoin(base, href)
-        if href.startswith("//"):
-            href = "https:" + href
-        if el.find("img"):
-            res = []
-            for ch in el.children:
-                r = el_to_blocks(ch, base=base)
-                if r:
-                    res += r if isinstance(r, list) else [r]
-            if res:
-                return res
-        if not link_text and not href:
-            return None
-        if not link_text:
-            return {"type": "paragraph", "text": href, "link_url": href}
-        if link_text == href or not href:
-            return {"type": "paragraph", "text": link_text, "link_url": href}
-        formatted = f"{link_text} [сноска: {href}]"
-        return {"type": "paragraph", "text": formatted, "link_url": href, "link_text": link_text}
-
-    if tag == "table":
-        rows = []
-        for tr in el.select("tr"):
-            cells = [td.get_text(strip=True) for td in tr.select("td, th")]
-            if any(cells):
-                rows.append(cells)
-        return {"type": "table", "rows": rows} if rows else None
-
-    if any("spoiler" in c.lower() for c in cls):
-        ct = el.select_one(".bbCodeBlock-title, .bbCodeSpoiler-button")
-        cc = el.select_one(".bbCodeBlock-content, .bbCodeSpoiler-content")
-        return {
-            "type": "spoiler",
-            "title": ct.get_text(strip=True) if ct else "Спойлер",
-            "blocks": body_to_blocks(cc, base=base) if cc else [],
-        }
-
-    if any("quote" in c.lower() for c in cls):
-        ct = el.select_one(".bbCodeBlock-title")
-        cc = el.select_one(".bbCodeBlock-content")
-        return {
-            "type": "quote",
-            "author": ct.get_text(strip=True) if ct else "",
-            "blocks": body_to_blocks(cc, base=base) if cc else [],
-        }
-
-    t = el.get_text(strip=True)
-    # Проверяем, есть ли внутри изображения — они не дают текста через get_text(),
-    # но должны быть обработаны рекурсивно. Иначе <p><img src="..."></p>
-    # вернёт None и картинка будет потеряна.
-    has_images = bool(el.find("img"))
-
-    if not t and not has_images:
-        return None
-
-    res = []
-    for ch in el.children:
-        r = el_to_blocks(ch, base=base)
-        if r:
-            res += r if isinstance(r, list) else [r]
-
-    if res:
-        return res
-    return {"type": "paragraph", "text": t} if t else None
 
 
 def parse_thread_content(http: HttpClient, thread: dict, first_post_only: bool, max_pages: int = 100,
@@ -5460,12 +5528,18 @@ def _process_blocks_with_images(blocks: list, ctx: dict) -> list:
                         _seen_urls.add(clean_u)
                         synth_img = {"type": "image", "src": clean_u, "alt": ""}
                         out.extend(_process_image_block(synth_img, ctx))
-            # v1.38: также проверяем link_url если он был сохранён тегом <a>
-            link_u = (b.get("link_url") or "").strip()
-            if link_u and link_u not in _seen_urls and _is_image_or_host_url(link_u):
-                _seen_urls.add(link_u)
-                synth_img = {"type": "image", "src": link_u, "alt": ""}
-                out.extend(_process_image_block(synth_img, ctx))
+            # v1.38: также проверяем link_url и links если они были сохранены тегом <a>
+            all_block_links = []
+            if b.get("link_url"):
+                all_block_links.append(b.get("link_url"))
+            if isinstance(b.get("links"), list):
+                all_block_links.extend(b.get("links"))
+            for link_u in all_block_links:
+                link_u = (link_u or "").strip()
+                if link_u and link_u not in _seen_urls and _is_image_or_host_url(link_u):
+                    _seen_urls.add(link_u)
+                    synth_img = {"type": "image", "src": link_u, "alt": ""}
+                    out.extend(_process_image_block(synth_img, ctx))
         else:
             out.append(b)
     return out
@@ -7770,10 +7844,16 @@ class SelectiveParserWindow(tk.Toplevel):
                 for b in blocks_list:
                     if not isinstance(b, dict):
                         continue
-                    # 1. Прямой атрибут link_url (вшитая гиперссылка в блоке)
-                    lu = (b.get("link_url") or "").strip()
-                    if lu:
-                        _check_and_add(lu)
+                    # 1. Прямой атрибут link_url / links (вшитая гиперссылка в блоке)
+                    all_links = []
+                    if b.get("link_url"):
+                        all_links.append(b.get("link_url"))
+                    if isinstance(b.get("links"), list):
+                        all_links.extend(b.get("links"))
+                    for lu in all_links:
+                        lu = (lu or "").strip()
+                        if lu:
+                            _check_and_add(lu)
 
                     # 2. Текст блока: ищем [сноска: URL], а также любые http(s):// и /threads/
                     txt = (b.get("text") or "").strip()
@@ -7850,9 +7930,15 @@ class SelectiveParserWindow(tk.Toplevel):
                             txt = b.get("text", "") or ""
                             if ("http://" in txt or "https://" in txt) and _is_image_or_host_url(txt):
                                 return True
-                            lu = (b.get("link_url") or "").strip()
-                            if lu and _is_image_or_host_url(lu):
-                                return True
+                            all_links = []
+                            if b.get("link_url"):
+                                all_links.append(b.get("link_url"))
+                            if isinstance(b.get("links"), list):
+                                all_links.extend(b.get("links"))
+                            for lu in all_links:
+                                lu = (lu or "").strip()
+                                if lu and _is_image_or_host_url(lu):
+                                    return True
                 return False
 
             def _fetch_and_process_thread(thr: dict, ocr_enabled: bool, is_child: bool = False, depth: int = 0, target_save_dir: Path = None):
