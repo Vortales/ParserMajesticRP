@@ -2421,7 +2421,7 @@ def body_to_blocks(body: Tag, base: str = ""):
     В XenForo абзацы формируются инлайн-потоками (текст, ссылки <a>, форматирование <b>/<i>/<span>),
     разделёнными тегами <br/> и блочными тегами (заголовки, цитаты, спойлеры, таблицы).
     Гиперссылки не разрывают предложение на отдельные строки, а встраиваются непосредственно
-    в текст фразы в формате: «текст ссылки [сноска: URL]».
+    в текст фразы в формате: «текст ссылки (URL)».
     """
     blocks = []
     curr_line_parts = []
@@ -2494,7 +2494,7 @@ def body_to_blocks(body: Tag, base: str = ""):
                 if href:
                     curr_line_links.append(href)
             else:
-                curr_line_parts.append(f"{link_text} [сноска: {href}]")
+                curr_line_parts.append(f"{link_text} ({href})")
                 curr_line_links.append(href)
             return
 
@@ -2566,7 +2566,7 @@ def body_to_blocks(body: Tag, base: str = ""):
                                 if h:
                                     li_links.append(h)
                             else:
-                                li_parts.append(f"{lt} [сноска: {h}]")
+                                li_parts.append(f"{lt} ({h})")
                                 li_links.append(h)
                             return
                         for child in el.children:
@@ -8095,10 +8095,18 @@ class SelectiveParserWindow(tk.Toplevel):
                             _check_and_add_forum(lu)
                             _check_and_add_doc(lu, lt)
 
-                    # 2. Текст блока: ищем [сноска: URL], а также открытые http(s)://
+                    # 2. Текст блока: ищем анкор (URL), [сноска: URL], а также открытые http(s)://
                     txt = (b.get("text") or "").strip()
                     if txt:
-                        # Извлекаем ссылки из формата сносок: текст [сноска: URL]
+                        # Извлекаем ссылки из формата: анкор (URL)
+                        parens_links = re.finditer(r"([^\(\n]+?)\s*\((https?://[^\s\(\)]+)\)", txt)
+                        for pl in parens_links:
+                            p_anchor = pl.group(1).strip()
+                            p_url = pl.group(2).strip()
+                            _check_and_add_forum(p_url)
+                            _check_and_add_doc(p_url, p_anchor)
+
+                        # Извлекаем ссылки из формата сносок: текст [сноска: URL] (для обратной совместимости)
                         footnotes = re.finditer(r"([^\[\]\n]+?)\s*\[сноска:\s*([^\]\s]+)\]", txt)
                         for fn in footnotes:
                             f_anchor = fn.group(1).strip()
