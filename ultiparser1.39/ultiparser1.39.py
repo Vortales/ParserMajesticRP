@@ -7947,7 +7947,7 @@ class SelectiveParserWindow(tk.Toplevel):
 
         skip_docx = bool(self.v_skip_docx.get())
         dfs_enabled = bool(self.v_dfs_enabled.get())
-        docs_download_enabled = bool(self.v_docs_download.get()) if hasattr(self, v_docs_download) else True
+        docs_download_enabled = bool(self.v_docs_download.get()) if hasattr(self, "v_docs_download") else True
         try:
             dfs_max_depth = max(1, min(15, int(self.v_dfs_depth.get())))
         except Exception:
@@ -8087,7 +8087,7 @@ class SelectiveParserWindow(tk.Toplevel):
                             _check_and_add_doc(cleaned_u, "")
 
                         # Относительные ссылки /threads/... или /posts/... в тексте
-                        urls = re.findall(r'https?://[^\s<>"\'\(\)\[\]]+', txt)
+                        rel_urls = re.findall(r'(?:^|[\s"\'\(])(/(?:threads|posts)/[^\s<>"\'\(\)\[\]]+)', txt)
                         for ru in rel_urls:
                             _check_and_add_forum(ru.rstrip(".,;:!?)"))
 
