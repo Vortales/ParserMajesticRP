@@ -2589,6 +2589,13 @@ def parse_thread_content(http: HttpClient, thread: dict, first_post_only: bool, 
             created_date = extract_thread_creation_date(html)
 
         soup = BeautifulSoup(html, BS_PARSER)
+        if page == 1:
+            try:
+                real_h1 = page_title(soup)
+                if real_h1:
+                    thread["title"] = real_h1
+            except Exception:
+                pass
         page_posts = extract_posts(soup, base=url)
         posts += page_posts
 
@@ -7786,7 +7793,7 @@ class SelectiveParserWindow(tk.Toplevel):
                                 return True
                 return False
 
-            def _fetch_and_process_thread(thr: dict, ocr_enabled: bool, is_child: bool = False, depth: int = 0):
+            def _fetch_and_process_thread(thr: dict, ocr_enabled: bool, is_child: bool = False, depth: int = 0, target_save_dir: Path = None):
                 if self._abort.is_set():
                     return None
 
@@ -7798,6 +7805,9 @@ class SelectiveParserWindow(tk.Toplevel):
                 old_cache = self.app.project.load_thread_cache(url)
                 if old_cache and isinstance(old_cache.get("data"), dict):
                     data = copy.deepcopy(old_cache["data"])
+                    if data.get("title"):
+                        title = data["title"]
+                        thr["title"] = title
 
                 if not data:
                     try:
@@ -7805,7 +7815,10 @@ class SelectiveParserWindow(tk.Toplevel):
                         self.app._log(f"{prefix} Загрузка контента темы: «{title}»...", "debug")
                         raw_html = self.app.http.get(url)
                         data = parse_thread_content(self.app.http, thr, fpo, initial_html=raw_html)
-                        if data and not data.get("title"):
+                        if data and data.get("title"):
+                            title = data["title"]
+                            thr["title"] = title
+                        elif data and not data.get("title"):
                             data["title"] = title
                     except Exception as e:
                         get_logger().warning(f"selective parse {url}: {e}")
@@ -7828,14 +7841,19 @@ class SelectiveParserWindow(tk.Toplevel):
                         get_logger().warning(f"selective ocr {url}: {e}")
                         self.app._log(f"    ⚠ [Выборочный] Ошибка OCR в «{title}»: {e}", "warn")
 
+                # Определяем директорию для сохранения JSON:
+                # Если передан target_save_dir (папка родительской темы), сохраняем внутрь неё
+                current_save_dir = target_save_dir if target_save_dir is not None else topics_dir
+                current_save_dir.mkdir(parents=True, exist_ok=True)
+
                 fname = safe_name(title) + ".json"
-                json_path = topics_dir / fname
+                json_path = current_save_dir / fname
                 try:
                     new_chk = compute_content_checksum(data or {})
                     layer_mark = f"selective_dfs_depth_{depth}" if is_child else "selective"
                     payload = build_topic_json(thr, data or {}, is_new=False, checksum=new_chk, layer=layer_mark)
                     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-                    self.app._log(f"    💾 [Выборочный] Сохранён .json: {json_path.name}", "ok")
+                    self.app._log(f"    💾 [Выборочный] Сохранён .json: {json_path}", "ok")
                 except Exception as e:
                     get_logger().error(f"save selective json {json_path}: {e}")
 
@@ -7848,7 +7866,13 @@ class SelectiveParserWindow(tk.Toplevel):
                     cur_d = done_count[0]
                     cur_tot = total_counter[0]
 
-                self.after(0, lambda: self._update_progress_ui(cur_d, cur_tot))
+                self.after(0, lambda d=cur_d, tot=cur_tot, t_name=title: self._update_progress_ui(d, tot, t_name))
+
+                # Если это корневая тема (depth == 0) и включен DFS, создаём подпапку для её связанных тем
+                # Имя папки совпадает с именем корневой темы (safe_name)
+                next_save_dir = target_save_dir
+                if depth == 0 and dfs_enabled:
+                    next_save_dir = topics_dir / safe_name(title)
 
                 if dfs_enabled and depth < dfs_max_depth and data and not self._abort.is_set():
                     child_links = _extract_thread_links_from_data(data)
@@ -7864,7 +7888,7 @@ class SelectiveParserWindow(tk.Toplevel):
                         with done_lock:
                             total_counter[0] += 1
                             new_tot = total_counter[0]
-                        self.after(0, lambda: self.progress.configure(maximum=new_tot))
+                        self.after(0, lambda tot=new_tot: self.progress.configure(maximum=tot))
 
                         child_thr = {
                             "title": f"Связанная тема: {cl_url.rstrip('/').split('/')[-1]}",
@@ -7872,7 +7896,7 @@ class SelectiveParserWindow(tk.Toplevel):
                             "sticky": False,
                         }
                         self.app._log(f"    🔗 [DFS/{depth+1}] Переход по связанной ссылке: {cl_url}", "info")
-                        _fetch_and_process_thread(child_thr, ocr_enabled=ocr_enabled, is_child=True, depth=depth + 1)
+                        _fetch_and_process_thread(child_thr, ocr_enabled=ocr_enabled, is_child=True, depth=depth + 1, target_save_dir=next_save_dir)
 
                 return data
 
@@ -7885,7 +7909,7 @@ class SelectiveParserWindow(tk.Toplevel):
                     if u_norm in visited_urls:
                         return
                     visited_urls.add(u_norm)
-                _fetch_and_process_thread(thr, ocr_enabled=ocr_enabled, is_child=False, depth=0)
+                _fetch_and_process_thread(thr, ocr_enabled=ocr_enabled, is_child=False, depth=0, target_save_dir=None)
 
             workers_count = self.app.v_workers.get() if hasattr(self.app, "v_workers") else 4
             items = list(enumerate(selected))
@@ -7923,7 +7947,9 @@ class SelectiveParserWindow(tk.Toplevel):
 
             dt = time.monotonic() - t0
             self._running = False
-            self.after(0, lambda: self.v_status.set(f"Готово за {dt:.1f}с ({done_count[0]}/{total} тем)"))
+            cur_done = done_count[0]
+            cur_total = total_counter[0]
+            self.after(0, lambda: self.v_status.set(f"Готово за {dt:.1f}с ({cur_done}/{cur_total} тем)"))
             self.after(0, lambda: self.btn_run.config(state="normal"))
             self.after(0, lambda: self.btn_cancel.config(text="Закрыть"))
 
@@ -7931,7 +7957,7 @@ class SelectiveParserWindow(tk.Toplevel):
             self.after(100, lambda: messagebox.showinfo(
                 "Выборочный парсер",
                 f"Выборочный парсинг успешно завершён!\n\n"
-                f"Спарсено тем: {done_count[0]} из {total}\n"
+                f"Спарсено тем: {cur_done} из {cur_total}\n"
                 f"Папка: {out_path}\n"
                 f"{doc_info}"
             ))
