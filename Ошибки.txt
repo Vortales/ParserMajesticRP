@@ -1,77 +1,252 @@
-D:\Users\79528\PycharmProjects\PythonProject1\.venv\Scripts\python.exe D:\Users\79528\PycharmProjects\PythonProject1\TestParser\ultiparser1.38.py 
+D:\Users\79528\PycharmProjects\PythonProject1\.venv\Scripts\python.exe D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\ultiparser1.40.py 
 ============================================================
-  🚀 ФОРУМ-МЕНЕДЖЕР v1.38
+  🚀 ФОРУМ-МЕНЕДЖЕР v1.40
 ============================================================
 
 🔧 Проверка зависимостей...
 ✅ Готово (парсер: lxml)
   ⚡ CUDA: доступна (NVIDIA GeForce RTX 3060 Laptop GPU) — EasyOCR будет работать на GPU
 
-22:31:18 | INFO    | ============================================================
-22:31:18 | INFO    | СТАРТ СЕАНСА ФОРУМ-МЕНЕДЖЕР v1.38
-22:31:18 | INFO    | Python: 3.12.6 | Платформа: Windows-10-10.0.19045-SP0
-22:31:18 | INFO    | Рабочая директория: D:\Users\79528\PycharmProjects\PythonProject1\TestParser
-22:31:18 | INFO    | ============================================================
-22:31:19 | INFO    | [UI] [OK] ✅ Состояние восстановлено из сохранённого файла
-22:31:19 | INFO    | [UI] [OK] 💾 Автозагружено 152 разделов из сохранённого файла
-22:33:58 | INFO    | [UI] [INFO] 🌐 Запускаю фоновый браузер для обхода антибота (используются сохранённые cookies, повторный логин не нужен)...
-22:33:58 | INFO    | [UI] [DEBUG] 🌐 Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe  (157.0.8103.80)
-22:33:59 | INFO    | [UI] [DEBUG]   🔌 Авто-драйвер (профиль)
-22:34:00 | INFO    | [UI] [DEBUG]   ✅ Браузер запущен (Авто-драйвер (профиль))
-22:34:05 | INFO    | [UI] [DEBUG]   🍪 В браузер применено cookies: 6/6
-22:34:05 | INFO    | [UI] [OK]   ✅ Сессия в браузере активна, cookies обновлены (10)
-22:34:05 | INFO    | [UI] [OK] ✅ Фоновый браузер-фолбэк готов и будет использоваться при блокировках
-22:34:05 | INFO    | [BROWSER] [READY] Фоновый браузер успешно инициализирован и подключён как фолбэк
-22:34:06 | INFO    | [UI] [DEBUG]     📄 [Выборочный] Загрузка контента темы: «Исковое заявление №324»...
-22:34:06 | INFO    | [UI] [DEBUG]     📄 [Выборочный] Загрузка контента темы: «Исковое заявление №99»...
-22:34:06 | INFO    | [UI] [DEBUG]     📄 [Выборочный] Загрузка контента темы: «Исковое заявление №97»...
-22:34:06 | INFO    | [UI] [DEBUG]     📄 [Выборочный] Загрузка контента темы: «Исковое заявление №105»...
-22:34:17 | WARNING | breaker: форум ограничил доступ — общая пауза 60с (все потоки и оба канала ждут, ретраи остановлены)
-22:34:23 | WARNING | fast: серия блокировок (HTTP 403) — только браузер на 300с
-22:34:24 | WARNING | breaker: форум ограничил доступ — общая пауза 120с (все потоки и оба канала ждут, ретраи остановлены)
-22:34:29 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no324.3742572/unread
-22:34:34 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no324.3742572/unread | Длительность: 4.25с | Размер: 243 КБ | Валиден: True
-22:34:34 | INFO    | cookies обновлены из браузера — быстрый путь восстановлен
-22:34:34 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no324.3742572/unread | 243 КБ
-22:34:34 | INFO    | [UI] [INFO]     🖼 [Выборочный] OCR распознавание картинок в «Исковое заявление №324»...
-22:34:34 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no99.3726045/unread
-22:34:35 | INFO    | [OCR] [DOWNLOAD_FAILED] url=https://imageban.ru/show/2026/11/07/28374259c29252327f66496fcf937c7a/png] | chars=0 | engine=none | dur=0.83s
-22:34:35 | INFO    | [OCR] [DOWNLOAD_FAILED] url=https://imageban.ru/show/2026/11/07/28374259c29252327f66496fcf937c7a/png | chars=0 | engine=none | dur=0.86s
-22:34:36 | INFO    | [OCR] [DOWNLOAD_FAILED] url=https://imageban.ru/show/2026/11/21/dfba08f806009c242fdda8b6b19b98e9/png] | chars=0 | engine=none | dur=0.92s
-22:34:37 | INFO    | [OCR] [DOWNLOAD_FAILED] url=https://imageban.ru/show/2026/11/21/dfba08f806009c242fdda8b6b19b98e9/png | chars=0 | engine=none | dur=0.75s
-22:34:38 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no99.3726045/unread | Длительность: 3.17с | Размер: 304 КБ | Валиден: True
-22:34:38 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no99.3726045/unread | 304 КБ
-22:34:38 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no97.3722239/unread
-22:34:38 | INFO    | [UI] [INFO]     🖼 [Выборочный] OCR распознавание картинок в «Исковое заявление №99»...
-22:34:39 | INFO    | [OCR] [DOWNLOAD_FAILED] url=https://imageban.ru/show/2026/11/10/a9028e08c400d870c70255c2480a0189/png] | chars=0 | engine=none | dur=0.89s
-22:34:40 | INFO    | [OCR] [DOWNLOAD_FAILED] url=https://imageban.ru/show/2026/11/10/a9028e08c400d870c70255c2480a0189/png | chars=0 | engine=none | dur=1.53s
-  ⚡ [EasyOCR] Модель загружена на GPU: NVIDIA GeForce RTX 3060 Laptop GPU
-22:34:43 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no97.3722239/unread | Длительность: 5.38с | Размер: 259 КБ | Валиден: True
-22:34:43 | INFO    | cookies обновлены из браузера — быстрый путь восстановлен
-22:34:43 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no97.3722239/unread | 259 КБ
-22:34:43 | INFO    | [UI] [INFO]     🖼 [Выборочный] OCR распознавание картинок в «Исковое заявление №97»...
-22:34:44 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no105.3742504/unread
-22:34:46 | INFO    | [OCR] [DOWNLOAD_FAILED] url=https://imgur.com/a/nWXaVXN] | chars=0 | engine=none | dur=2.84s
-22:34:47 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no105.3742504/unread | Длительность: 3.50с | Размер: 266 КБ | Валиден: True
-22:34:47 | INFO    | cookies обновлены из браузера — быстрый путь восстановлен
-22:34:47 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no105.3742504/unread | 266 КБ
-22:34:47 | INFO    | [UI] [INFO]     🖼 [Выборочный] OCR распознавание картинок в «Исковое заявление №105»...
-  ⚡ [EasyOCR] Модель загружена на GPU: NVIDIA GeForce RTX 3060 Laptop GPU
-22:34:50 | INFO    | [OCR] [DOWNLOAD_FAILED] url=https://imgur.com/a/nWXaVXN | chars=0 | engine=none | dur=3.39s
-22:34:53 | INFO    | [OCR] [DOWNLOAD_FAILED] url=https://imgur.com/a/oCAN8bw] | chars=0 | engine=none | dur=3.23s
-22:34:56 | INFO    | [OCR] [DOWNLOAD_FAILED] url=https://imgur.com/a/oCAN8bw | chars=0 | engine=none | dur=2.86s
-22:34:58 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/LuR452A.png | chars=10 | engine=EasyOCR | dur=0.97s
-D:\Users\79528\PycharmProjects\PythonProject1\.venv\Lib\site-packages\torch\nn\modules\rnn.py:1141: UserWarning: RNN module weights are not part of single contiguous chunk of memory. This means they need to be compacted at every call, possibly greatly increasing memory usage. To compact weights again call flatten_parameters(). (Triggered internally at C:\actions-runner\_work\pytorch\pytorch\pytorch\aten\src\ATen\native\cudnn\RNN.cpp:1480.)
-  result = _VF.lstm(
-22:35:10 | INFO    | [OCR] [SUCCESS] url=https://e.radikal.host/2026/11/12/imagef948b1f4175523cf.png | chars=1367 | engine=EasyOCR | dur=10.97s
-22:35:13 | INFO    | [OCR] [SUCCESS] url=https://cdn.docossum.com/documents/oGCEQ5ZG4RwnI5iMM2nLtUA8drVL1HBX.jpeg | chars=1904 | engine=EasyOCR | dur=31.41s
-22:35:13 | INFO    | [OCR] [SUCCESS] url=https://allwebs.ru/images/2026/11/21/file-1ca05abdd7ea5fb7c.jpg | chars=1935 | engine=EasyOCR | dur=35.69s
-22:35:14 | INFO    | [OCR] [SUCCESS] url=https://e.radikal.host/2026/11/23/imageeec74a2eea4b5124.png | chars=1832 | engine=EasyOCR | dur=24.33s
-22:35:26 | INFO    | [OCR] [SUCCESS] url=https://allwebs.ru/images/2026/11/19/file-165f0b642ce572519.jpg | chars=2022 | engine=EasyOCR | dur=15.61s
-22:35:30 | INFO    | [OCR] [SUCCESS] url=https://e.radikal.host/2026/11/23/IZOBRAZENIE_2026-11-23_155611554.png | chars=1388 | engine=EasyOCR | dur=15.06s
-22:35:34 | INFO    | [OCR] [SUCCESS] url=https://allwebs.ru/images/2026/11/19/file-22aa45609c0499222.jpg | chars=796 | engine=EasyOCR | dur=6.67s
-22:35:35 | INFO    | [OCR] [SUCCESS] url=https://allwebs.ru/images/2026/11/24/imagee8614b7849767ff5.png | chars=2005 | engine=EasyOCR | dur=21.02s
-22:35:35 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён .json: Исковое заявление №324.json
+02:40:04 | INFO    | ============================================================
+02:40:04 | INFO    | СТАРТ СЕАНСА ФОРУМ-МЕНЕДЖЕР v1.40
+02:40:04 | INFO    | Python: 3.12.6 | Платформа: Windows-10-10.0.19045-SP0
+02:40:04 | INFO    | Рабочая директория: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser
+02:40:04 | INFO    | ============================================================
+02:40:05 | INFO    | [UI] [OK] ✅ Состояние восстановлено из сохранённого файла
+02:40:05 | INFO    | [UI] [OK] 💾 Автозагружено 152 разделов из сохранённого файла
+02:40:30 | INFO    | [UI] [INFO] 🌐 Запускаю фоновый браузер для обхода антибота (используются сохранённые cookies, повторный логин не нужен)...
+02:40:30 | INFO    | [UI] [DEBUG] 🌐 Chrome: C:\Program Files\Google\Chrome\Application\chrome.exe  (157.0.8103.80)
+02:40:30 | INFO    | [UI] [DEBUG]   🔌 Авто-драйвер (профиль)
+02:40:32 | INFO    | [UI] [DEBUG]   ✅ Браузер запущен (Авто-драйвер (профиль))
+02:40:37 | INFO    | [UI] [DEBUG]   🍪 В браузер применено cookies: 6/6
+02:40:37 | INFO    | [UI] [OK]   ✅ Сессия в браузере активна, cookies обновлены (10)
+02:40:37 | INFO    | [UI] [OK] ✅ Фоновый браузер-фолбэк готов и будет использоваться при блокировках
+02:40:37 | INFO    | [BROWSER] [READY] Фоновый браузер успешно инициализирован и подключён как фолбэк
+02:40:38 | INFO    | [UI] [DEBUG]     📄 [Выборочный] Быстрая загрузка темы с форума: «Исковое заявление №324»...
+02:40:38 | INFO    | [UI] [DEBUG]     📄 [Выборочный] Быстрая загрузка темы с форума: «Исковое заявление №99»...
+02:40:38 | INFO    | [UI] [DEBUG]     📄 [Выборочный] Быстрая загрузка темы с форума: «Исковое заявление №105»...
+02:40:38 | INFO    | [UI] [DEBUG]     📄 [Выборочный] Быстрая загрузка темы с форума: «Исковое заявление №97»...
+02:40:46 | WARNING | breaker: форум ограничил доступ — общая пауза 60с (все потоки и оба канала ждут, ретраи остановлены)
+02:40:54 | WARNING | fast: серия блокировок (HTTP 403) — только браузер на 300с
+02:40:57 | WARNING | breaker: форум ограничил доступ — общая пауза 120с (все потоки и оба канала ждут, ретраи остановлены)
+02:41:01 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no99.3726045/unread
+02:41:05 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no99.3726045/unread | Длительность: 3.97с | Размер: 304 КБ | Валиден: True
+02:41:05 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no99.3726045/unread | 304 КБ
+02:41:05 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no324.3742572/unread
+02:41:05 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №99.json
+02:41:05 | INFO    | [UI] [INFO]     📥 [Документ] Скачивание «httpsdocsgooglecomdocumentd1xIjwRY-op6U5pAgA5eaqBdg82tgHBLQsuJTNFhRvrSoedittabt0.docx»...
+02:41:05 | INFO    | [UI] [INFO]     📥 [Документ] Скачивание «httpsdocsgooglecomspreadsheetsd1JhYrZcQjX8afOgE76HwVhdfCgQ3-k4MkBS5TIXyI3Poeditgid10856342….xlsx»...
+02:41:05 | INFO    | [UI] [INFO]     📥 [Документ] Скачивание «httpsdocsgooglecomdocumentd14hmlB4YrCmQNSzjqGoLb5HdktUqOMGyClrX9wPMYAoUedittabt0.docx»...
+02:41:05 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/oGCEQ5ZG4RwnI5iMM2nLtUA8drVL1HBX.jpeg | chars=1904 | engine=none | dur=0.00s
+02:41:05 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/3I1lqLCV6jpFpt03VHkuDEW9dkhZZJS4.jpeg | chars=2361 | engine=none | dur=0.00s
+02:41:05 | INFO    | [UI] [INFO]     🔗 [DFS/1] Переход по связанной ссылке: https://forum.majestic-rp.ru/posts/11815373/
+02:41:05 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-1] Быстрая загрузка темы с форума: «Связанная тема: 11815373»...
+02:41:05 | INFO    | [OCR] [CACHE_HIT] url=https://i.yapx.ru/eauRV.png | chars=2404 | engine=none | dur=0.00s
+02:41:05 | INFO    | [OCR] [CACHE_HIT] url=https://i.yapx.ru/eauRW.png | chars=2132 | engine=none | dur=0.00s
+02:41:05 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/8c5eUVp.png | chars=2629 | engine=none | dur=0.00s
+02:41:05 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/Vi3qdmc.png | chars=2952 | engine=none | dur=0.00s
+02:41:05 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/kmFuq0e.png | chars=985 | engine=none | dur=0.00s
+02:41:05 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/LuR452A.png | chars=10 | engine=none | dur=0.00s
+02:41:05 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/4Y7D4hS.png | chars=2633 | engine=none | dur=0.00s
+02:41:05 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/Jqvbwim.png | chars=2703 | engine=none | dur=0.00s
+02:41:05 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/xwhLmbW.png | chars=2940 | engine=none | dur=0.00s
+02:41:05 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/5EbpsBl.png | chars=1964 | engine=none | dur=0.00s
+02:41:07 | INFO    | [UI] [OK]     ✅ [Документ] Успешно скачан: httpsdocsgooglecomdocumentd1xIjwRY-op6U5pAgA5eaqBdg82tgHBLQsuJTNFhRvrSoedittabt0.docx
+02:41:07 | INFO    | [UI] [OK]     ✅ [Документ] Успешно скачан: httpsdocsgooglecomspreadsheetsd1JhYrZcQjX8afOgE76HwVhdfCgQ3-k4MkBS5TIXyI3Poeditgid10856342….xlsx
+02:41:07 | INFO    | [UI] [OK]     ✅ [Документ] Успешно скачан: httpsdocsgooglecomdocumentd14hmlB4YrCmQNSzjqGoLb5HdktUqOMGyClrX9wPMYAoUedittabt0.docx
+02:41:09 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no324.3742572/unread | Длительность: 3.83с | Размер: 242 КБ | Валиден: True
+02:41:09 | INFO    | cookies обновлены из браузера — быстрый путь восстановлен
+02:41:09 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no324.3742572/unread | 242 КБ
+02:41:09 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №324.json
+02:41:09 | INFO    | [OCR] [CACHE_HIT] url=https://allwebs.ru/images/2026/11/24/imagee8614b7849767ff5.png | chars=2005 | engine=none | dur=0.00s
+02:41:09 | INFO    | [OCR] [CACHE_HIT] url=https://allwebs.ru/images/2026/11/21/file-1ca05abdd7ea5fb7c.jpg | chars=1935 | engine=none | dur=0.00s
+02:41:09 | INFO    | [UI] [INFO]     🔗 [DFS/1] Переход по связанной ссылке: https://forum.majestic-rp.ru/posts/11821207/
+02:41:09 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-1] Быстрая загрузка темы с форума: «Связанная тема: 11821207»...
+02:41:13 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no97.3722239/unread
+02:41:17 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no97.3722239/unread | Длительность: 3.81с | Размер: 259 КБ | Валиден: True
+02:41:17 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no97.3722239/unread | 259 КБ
+02:41:17 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no105.3742504/unread
+02:41:17 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №97.json
+02:41:17 | INFO    | [UI] [INFO]     🔗 [DFS/1] Переход по связанной ссылке: https://forum.majestic-rp.ru/threads/kabinet-spiker-senata.3364868/post-11762184
+02:41:17 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-1] Быстрая загрузка темы с форума: «Связанная тема: post-11762184»...
+02:41:17 | INFO    | [OCR] [CACHE_HIT] url=https://e.radikal.host/2026/11/12/imagef948b1f4175523cf.png | chars=1367 | engine=none | dur=0.00s
+02:41:17 | INFO    | [OCR] [CACHE_HIT] url=https://allwebs.ru/images/2026/11/19/file-165f0b642ce572519.jpg | chars=2022 | engine=none | dur=0.00s
+02:41:17 | INFO    | [OCR] [CACHE_HIT] url=https://allwebs.ru/images/2026/11/19/file-22aa45609c0499222.jpg | chars=796 | engine=none | dur=0.00s
+02:41:17 | INFO    | [OCR] [CACHE_HIT] url=https://allwebs.ru/images/2026/11/20/file-161beb1a12849fccb.jpg | chars=2170 | engine=none | dur=0.00s
+02:41:17 | INFO    | [OCR] [CACHE_HIT] url=https://allwebs.ru/images/2026/11/20/file-20d868eab473d39a1.jpg | chars=814 | engine=none | dur=0.00s
+02:41:17 | INFO    | [OCR] [CACHE_HIT] url=https://allwebs.ru/images/2026/11/21/file-16f4bcc6857cd1cbf.jpg | chars=2055 | engine=none | dur=0.00s
+02:41:17 | INFO    | [OCR] [CACHE_HIT] url=https://allwebs.ru/images/2026/11/21/file-2494d18cfb6623468.jpg | chars=1390 | engine=none | dur=0.00s
+02:41:17 | INFO    | [OCR] [CACHE_HIT] url=https://allwebs.ru/images/2026/11/21/file-1062b01b3b2837e62.jpg | chars=1966 | engine=none | dur=0.00s
+02:41:17 | INFO    | [OCR] [CACHE_HIT] url=https://allwebs.ru/images/2026/11/21/file-145cb15e43bb852af.jpg | chars=2369 | engine=none | dur=0.00s
+02:41:17 | INFO    | [OCR] [CACHE_HIT] url=https://allwebs.ru/images/2026/11/21/file-2220e53cfa829d4af.jpg | chars=2928 | engine=none | dur=0.00s
+02:41:17 | INFO    | [OCR] [CACHE_HIT] url=https://allwebs.ru/images/2026/11/21/file-3b895e54b4b5fd606.jpg | chars=909 | engine=none | dur=0.00s
+02:41:19 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no105.3742504/unread | Длительность: 2.83с | Размер: 266 КБ | Валиден: True
+02:41:19 | INFO    | cookies обновлены из браузера — быстрый путь восстановлен
+02:41:19 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/threads/iskovoye-zayavleniye-no105.3742504/unread | 266 КБ
+02:41:20 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №105.json
+02:41:20 | INFO    | [UI] [INFO]     🔗 [DFS/1] Переход по связанной ссылке: https://forum.majestic-rp.ru/posts/11830060/
+02:41:20 | INFO    | [OCR] [CACHE_HIT] url=https://e.radikal.host/2026/11/23/imageeec74a2eea4b5124.png | chars=1832 | engine=none | dur=0.00s
+02:41:20 | INFO    | [OCR] [CACHE_HIT] url=https://e.radikal.host/2026/11/23/IZOBRAZENIE_2026-11-23_155611554.png | chars=1388 | engine=none | dur=0.00s
+02:41:20 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-1] Быстрая загрузка темы с форума: «Связанная тема: 11830060»...
+02:41:20 | INFO    | [OCR] [CACHE_HIT] url=https://e.radikal.host/2026/11/23/imagef832ebf6a660e4d6.png | chars=1871 | engine=none | dur=0.00s
+02:41:20 | INFO    | [OCR] [CACHE_HIT] url=https://e.radikal.host/2026/11/23/IZOBRAZENIE_2026-11-23_155719711.png | chars=2312 | engine=none | dur=0.00s
+02:41:20 | INFO    | [OCR] [CACHE_HIT] url=https://e.radikal.host/2026/11/23/IZOBRAZENIE_2026-11-23_155725115.png | chars=1882 | engine=none | dur=0.00s
+02:43:18 | WARNING | breaker: форум ограничил доступ — общая пауза 300с (все потоки и оба канала ждут, ретраи остановлены)
+02:43:26 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/threads/kabinet-spiker-senata.3364868/post-11762184
+02:43:31 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/threads/kabinet-spiker-senata.3364868/post-11762184 | Длительность: 4.39с | Размер: 343 КБ | Валиден: True
+02:43:31 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/threads/kabinet-spiker-senata.3364868/post-11762184 | 343 КБ
+02:43:31 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №97\Кабинет Спикер Сената.json
+02:43:31 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/CCMCVBF.png | chars=896 | engine=none | dur=0.00s
+02:43:31 | INFO    | [UI] [INFO]     📥 [Документ] Скачивание «httpsdocsgooglecomdocumentd1w1DoJKVzdqG6RI8ZwLgpDtIsF3fbsp4Mo0LXBs5BS3Medittabt0.docx»...
+02:43:31 | INFO    | [UI] [INFO]     📥 [Документ] Скачивание «httpsdocsgooglecomdocumentd1YULp4KtWRA2fbbngZjd2vx6K20C5efhrr8Bbj9ICcOwedittabt0.docx»...
+02:43:31 | INFO    | [UI] [INFO]     🔗 [DFS/1] Переход по связанной ссылке: https://forum.majestic-rp.ru/threads/respublikanskaya-partiya-vozrozhdeniye.3451307/post-11766080
+02:43:31 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-1] Быстрая загрузка темы с форума: «Связанная тема: post-11766080»...
+02:43:31 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/qBFLteA.png | chars=892 | engine=none | dur=0.00s
+02:43:31 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/32D0mMr.png | chars=1650 | engine=none | dur=0.00s
+02:43:31 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/c544EYv.png | chars=2387 | engine=none | dur=0.00s
+02:43:31 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/w6H8ENE.png | chars=2742 | engine=none | dur=0.00s
+02:43:31 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/RzEUsa3.png | chars=1982 | engine=none | dur=0.00s
+02:43:31 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/XHzcdtj.png | chars=1232 | engine=none | dur=0.00s
+02:43:31 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/EczwxIV.png | chars=1186 | engine=none | dur=0.00s
+02:43:31 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/xYytoRi.png | chars=1186 | engine=none | dur=0.00s
+02:43:32 | INFO    | [UI] [OK]     ✅ [Документ] Успешно скачан: httpsdocsgooglecomdocumentd1YULp4KtWRA2fbbngZjd2vx6K20C5efhrr8Bbj9ICcOwedittabt0.docx
+02:43:33 | INFO    | [UI] [OK]     ✅ [Документ] Успешно скачан: httpsdocsgooglecomdocumentd1w1DoJKVzdqG6RI8ZwLgpDtIsF3fbsp4Mo0LXBs5BS3Medittabt0.docx
+02:43:33 | WARNING | fast: серия блокировок (HTTP 403) — только браузер на 300с
+02:43:38 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/posts/11830060/
+02:43:42 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/posts/11830060/ | Длительность: 4.14с | Размер: 259 КБ | Валиден: True
+02:43:42 | INFO    | cookies обновлены из браузера — быстрый путь восстановлен
+02:43:42 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/posts/11830060/ | 259 КБ
+02:43:42 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №105\Исковое заявление №97.json
+02:43:42 | INFO    | [UI] [INFO]     🔗 [DFS/2] Переход по связанной ссылке: https://forum.majestic-rp.ru/posts/11821717/
+02:43:42 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-2] Быстрая загрузка темы с форума: «Связанная тема: 11821717»...
+02:43:51 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/posts/11821207/
+02:43:55 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/posts/11821207/ | Длительность: 4.36с | Размер: 336 КБ | Валиден: True
+02:43:55 | INFO    | cookies обновлены из браузера — быстрый путь восстановлен
+02:43:55 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/posts/11821207/ | 336 КБ
+02:43:55 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №324\Ордера Правительства Штата Сан-Андреас.json
+02:43:55 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/ss0b18LLQznni0rW3qz9HNXXPi3XO0zX.jpeg | chars=1477 | engine=none | dur=0.00s
+02:43:55 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/XX9CqO2NNR7wRk9GFrMKHGOkzvPa5I5d.jpeg | chars=1631 | engine=none | dur=0.00s
+02:43:55 | INFO    | [UI] [INFO]     🔗 [DFS/1] Переход по связанной ссылке: https://forum.majestic-rp.ru/posts/11820717/
+02:43:55 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-1] Быстрая загрузка темы с форума: «Связанная тема: 11820717»...
+02:43:55 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/mKEyfIy5MmtTQTC9NBBT8gVe11pT7X9J.jpeg | chars=1573 | engine=none | dur=0.00s
+02:43:55 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/Nz7ziu1CsOdayfBwI8t1WyRnilXNyIld.jpeg | chars=1581 | engine=none | dur=0.00s
+02:43:55 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/FRQ7gtJ7K7aysbtMMf7JrbMn0OAOAlBo.jpeg | chars=1609 | engine=none | dur=0.00s
+02:43:55 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/ZROT9M3LhxgNLoc9xTq03EwdevuPJWw0.jpeg | chars=1624 | engine=none | dur=0.00s
+02:43:55 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/eLau5VNmHXpmMA7G0v90zwHqO7gQ1gPO.jpeg | chars=1614 | engine=none | dur=0.00s
+02:43:55 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/j20IpM0zHWaSsH1D7tNgbdOIyWekVaX9.jpeg | chars=1642 | engine=none | dur=0.00s
+02:43:55 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/CFNuQPUgzp6vZvy1ldWcqS6qddQ14uUU.jpeg | chars=1584 | engine=none | dur=0.00s
+02:43:55 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/6DY2xEIAY11ifT7A0RCuEM9gUWJdxzQO.jpeg | chars=1565 | engine=none | dur=0.00s
+02:43:56 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/bmwy0NsRqCED36oAybge95ZGinIGWwkC.jpeg | chars=1557 | engine=none | dur=0.00s
+02:43:56 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/BkaojpV3g1lx2kOkaKtcHCl8xmqcgN0B.jpeg | chars=1598 | engine=none | dur=0.00s
+02:43:56 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/AlGjeDJBbjazL6nnBr1oIpPyllYepEN3.jpeg | chars=1591 | engine=none | dur=0.00s
+02:43:56 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/yP2nUM7DZDddlBj3HRmLUZQyYIQ8gKm0.jpeg | chars=1577 | engine=none | dur=0.00s
+02:43:56 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/e9gSHBeaLan2BwVon8CJYxbkD2NQa5Bc.jpeg | chars=1564 | engine=none | dur=0.00s
+02:43:56 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/IdrQjdVg0G72D6TI77KQiFNiCA98zoQx.jpeg | chars=1581 | engine=none | dur=0.00s
+02:43:56 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/oKTdCF5hQcw2OPyjJ0fS0XgOhc5pZD1k.jpeg | chars=1571 | engine=none | dur=0.00s
+02:43:56 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/651hLkJ2rb0Dvm0f646qEki6DcFZKGHB.jpeg | chars=1450 | engine=none | dur=0.00s
+02:43:56 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/rVrtkIMljWXN7YHlrguI870og0rWetVr.jpeg | chars=1591 | engine=none | dur=0.00s
+02:44:04 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/posts/11815373/
+02:44:08 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/posts/11815373/ | Длительность: 3.70с | Размер: 296 КБ | Валиден: True
+02:44:08 | INFO    | cookies обновлены из браузера — быстрый путь восстановлен
+02:44:08 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/posts/11815373/ | 296 КБ
+02:44:08 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №99\Постановления Директора USSS.json
+02:44:08 | INFO    | [UI] [INFO]     📥 [Документ] Скачивание «httpsdocsgooglecomdocumentd14tCBbXXkNNBvN9fhXjPkocVxydkBPoRSkSQNqsfW3Ssedituspsharing.docx»...
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/O7sgH7an9rIeCXbSqJx8m3ANBgdr2udu.jpeg | chars=848 | engine=none | dur=0.00s
+02:44:08 | INFO    | [UI] [INFO]     🔗 [DFS/2] Переход по связанной ссылке: https://forum.majestic-rp.ru/posts/11778610/
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/dO99knuEMJuVXVxEoEiD0AxhuzO3tMSC.jpeg | chars=848 | engine=none | dur=0.00s
+02:44:08 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-2] Быстрая загрузка темы с форума: «Связанная тема: 11778610»...
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/djNkIpdcrv147Of8UYW04Fa2AtSxjhFl.jpeg | chars=851 | engine=none | dur=0.00s
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/rugCzATQiDOJVLdoArsOagcB5H8iK8lK.jpeg | chars=851 | engine=none | dur=0.00s
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/2t5Dhj7pnuocJLg04p7YWC2XEXsd5oez.jpeg | chars=926 | engine=none | dur=0.00s
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/GBzlKrVchz5Rmf2ut0vSp2UuxP0hNzGU.jpeg | chars=860 | engine=none | dur=0.00s
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/nTIZRqOZy2TzxcELmiUgMLFwdYDOgnNm.jpeg | chars=857 | engine=none | dur=0.00s
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/ZgLuQ2DRtGqkqg98r3yCC69PfilXxoZe.jpeg | chars=916 | engine=none | dur=0.00s
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/4v5iz0YUCV5Desd2ndnB9sn9gchYm3DI.jpeg | chars=850 | engine=none | dur=0.00s
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/8RYAA1zsBBr9YhZN9AIbsBmLX4d3L1gL.jpeg | chars=864 | engine=none | dur=0.00s
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/tGmTRTTwdoh4L773DeYD20TCvfFcQk6m.jpeg | chars=847 | engine=none | dur=0.00s
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/xmCxyO7ob24qLAFcK3nlpzWXVOE4hecD.jpeg | chars=856 | engine=none | dur=0.00s
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/74hTvPp.png | chars=3 | engine=none | dur=0.00s
+02:44:08 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/c3rHx4HcuRJZYKHcfLylUeuZkrh827UA.jpeg | chars=858 | engine=none | dur=0.00s
+02:44:09 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/Dw8RY2Ji59uw4qGcCIfDXjz7tfPl6EoQ.jpeg | chars=841 | engine=none | dur=0.00s
+02:44:15 | INFO    | [UI] [OK]     ✅ [Документ] Успешно скачан: httpsdocsgooglecomdocumentd14tCBbXXkNNBvN9fhXjPkocVxydkBPoRSkSQNqsfW3Ssedituspsharing.docx
+02:48:37 | WARNING | breaker: форум ограничил доступ — общая пауза 600с (все потоки и оба канала ждут, ретраи остановлены)
+02:48:39 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/posts/11820717/
+02:48:44 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/posts/11820717/ | Длительность: 4.59с | Размер: 354 КБ | Валиден: True
+02:48:44 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/posts/11820717/ | 354 КБ
+02:48:44 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №324\Нормативно-Правовые акты офиса Генерального прокурора штата Сан-Андреас.json
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/QCw0eQxDvu8dO2WTextdJviwm8W1jfpm.jpeg | chars=820 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/j02jEwctsZ8iEczB7ha3JgEAxjOnKcYc.jpeg | chars=2149 | engine=none | dur=0.00s
+02:48:44 | INFO    | [UI] [INFO]     🔗 [DFS/1] Переход по связанной ссылке: https://forum.majestic-rp.ru/posts/11830954/
+02:48:44 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-1] Быстрая загрузка темы с форума: «Связанная тема: 11830954»...
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/7DEx3lPxNHCATnI74nvop37XEB3jvznc.jpeg | chars=2579 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/3bGQuGVLAIdizOihRRJ92dkRxrOPX386.jpeg | chars=2977 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/jDqI5EaPIwZWYG42XihWN0ki4Ub5xggq.jpeg | chars=2588 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/840wO9QMK9DedKUSoGhkKgg84QlFqBZ8.jpeg | chars=1553 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/A3rocCJHIF1epV1VPnONCxCTM6mSSocK.jpeg | chars=1338 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/sHOrgUL1Qc6xpm94espwsmaZtZVdB1cy.jpeg | chars=1412 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/LDvlojZcNVimh8eVsOncJC30Xca1pUZs.jpeg | chars=1590 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/Py123U4ianEVJA7GLTXL4xVutl6CQUp7.jpeg | chars=1419 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/gYpzBMdXAB3TvpRCb8Xu24V1wi2bxroe.jpeg | chars=2002 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/nRPQFv4JCK3TQigcZfhA0SWwfF1MyCt5.jpeg | chars=1419 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/j0cRCNPU2WuHMHCxovdT9DyYwjOCeD0K.jpeg | chars=1994 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/0S9vF8E2UYrKzxsO5gLLRf3surTtssk2.jpeg | chars=2126 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/pS99wbvxbcaSC6SWCHatqNMMk7oi6TMh.jpeg | chars=243 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/R5DpjAIOpW2d5Ck12yvmffAQr0cVrXJi.jpeg | chars=2192 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/T3pWULjq2VmwLJqcbi1WCv4xM0pX0uZC.jpeg | chars=1776 | engine=none | dur=0.00s
+02:48:44 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/DU5vctbbDi7ibx1QCapreLqPRIDF66Cc.jpeg | chars=1529 | engine=none | dur=0.00s
+02:48:45 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/JzpDtpDhd4mPrO5UtjxUVAuiA2d31Mzw.jpeg | chars=1415 | engine=none | dur=0.00s
+02:48:45 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/P70BJNruSUBx2ubZmEcqB9wbt4rEGTsX.jpeg | chars=1335 | engine=none | dur=0.00s
+02:48:45 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/PmPzIx4Xa8JWpQvgdb5ndvsGFcd2zUTX.jpeg | chars=1924 | engine=none | dur=0.00s
+02:48:45 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/IECYuR0WzwIr2lr7OJnazJ8P78REUv62.jpeg | chars=2555 | engine=none | dur=0.00s
+02:48:45 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/LsqvnvgFyaITg2QwNV1L41JwLOXwdp1T.jpeg | chars=2580 | engine=none | dur=0.00s
+02:48:45 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/1h1B8osONyQ2ZdR973HS9LtLPw2u1vEA.jpeg | chars=2082 | engine=none | dur=0.00s
+02:48:45 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/T7mYpQBoEkbLoL4eXJh8xdS2cIWHqcrQ.jpeg | chars=2025 | engine=none | dur=0.00s
+02:48:45 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/iYfgBRTCTPVZ4FKs3alQaCwdCHDFDYWc.jpeg | chars=1143 | engine=none | dur=0.00s
+02:48:45 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/yXn7fX3EwwdpTmq8hn1OtjYv8Aw8Wge7.jpeg | chars=1333 | engine=none | dur=0.00s
+02:48:49 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/posts/11778610/
+02:48:52 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/posts/11778610/ | Длительность: 3.78с | Размер: 340 КБ | Валиден: True
+02:48:52 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/posts/11778610/ | 340 КБ
+02:48:53 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №99\Ордера Правительства Штата Сан-Андреас.json
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/rWq5sqii1B39j7L2HWYch1QnbRO2wx7s.jpeg | chars=1622 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/4H9WW4rLAp8xeBrZO3HF4816gcyS3IwJ.jpeg | chars=1293 | engine=none | dur=0.00s
+02:48:53 | INFO    | [UI] [INFO]     🔗 [DFS/2] Переход по связанной ссылке: https://forum.majestic-rp.ru/posts/11784687/
+02:48:53 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-2] Быстрая загрузка темы с форума: «Связанная тема: 11784687»...
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/yLHMf3AVdk9igqoUcrHGfArozZCP4B9G.jpeg | chars=1554 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/h7X9FyG5BY9LV3YTSGnrcoRzWoXnWLwr.jpeg | chars=1327 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/qdpj5ypN7zloj1SrLGY19KkusiQ8LLFZ.jpeg | chars=1647 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/mhqQncT.png | chars=2620 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/S8nb91rsgnEvvnok7K6MoH7LyQbwi8GM.jpeg | chars=1452 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/AINprSfPWqiYm7TCNoogUftYbiFX4IOU.jpeg | chars=1583 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/YisWHySqsST2XLV7UXAbSOBGMtHFNbyx.jpeg | chars=1608 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/nKekC514UfDfVXwGgwPYZc8Qm1PMsXfl.jpeg | chars=1615 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/JGetGjp4DpgLFdqeuYJ0odbfswZK76uv.jpeg | chars=1581 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/GsNK5JXfOo0zCFDN2IMRI7mWBVMGpKlr.jpeg | chars=1596 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/XbcTQmrmVEZ8Y59IDDNMNYBjRu9U6C5D.jpeg | chars=1586 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/W9beZDG.png | chars=2631 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/jCviBqpdEQOh3COT9eaaZnlFtwoCigJr.jpeg | chars=1488 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/lh5Bef0QqL2MY6LKFxvuI6hKoS33Hdw8.jpeg | chars=1584 | engine=none | dur=0.00s
+02:48:53 | INFO    | [OCR] [CACHE_HIT] url=https://cdn.docossum.com/documents/iygCztUbhXrRi2ozqVhmlduSHhuUUe7K.jpeg | chars=1603 | engine=none | dur=0.00s
+02:48:55 | WARNING | fast: серия блокировок (HTTP 403) — только браузер на 300с
+02:49:08 | WARNING | breaker: форум ограничил доступ — общая пауза 600с (все потоки и оба канала ждут, ретраи остановлены)
+02:49:15 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/threads/respublikanskaya-partiya-vozrozhdeniye.3451307/post-11766080
+02:49:19 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/threads/respublikanskaya-partiya-vozrozhdeniye.3451307/post-11766080 | Длительность: 3.89с | Размер: 341 КБ | Валиден: True
+02:49:19 | INFO    | cookies обновлены из браузера — быстрый путь восстановлен
+02:49:19 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/threads/respublikanskaya-partiya-vozrozhdeniye.3451307/post-11766080 | 341 КБ
+02:49:19 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №97\Республиканская партия «Возрождение».json
+02:49:22 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/posts/11821717/
+02:49:26 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/posts/11821717/ | Длительность: 3.95с | Размер: 259 КБ | Валиден: True
+02:49:26 | INFO    | cookies обновлены из браузера — быстрый путь восстановлен
+02:49:26 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/posts/11821717/ | 259 КБ
+02:49:26 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №105\Исковое заявление №97.json
+02:49:27 | INFO    | [UI] [INFO]     🔗 [DFS/1] Переход по связанной ссылке: https://forum.majestic-rp.ru/posts/11766438/
+02:49:27 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-1] Быстрая загрузка темы с форума: «Связанная тема: 11766438»...
+02:58:59 | WARNING | breaker: форум ограничил доступ — общая пауза 600с (все потоки и оба канала ждут, ретраи остановлены)
+02:59:01 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/posts/11784687/
+02:59:06 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/posts/11784687/ | Длительность: 4.05с | Размер: 341 КБ | Валиден: True
+02:59:06 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/posts/11784687/ | 341 КБ
+02:59:06 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №99\Ордера Правительства Штата Сан-Андреас.json
+02:59:06 | INFO    | [UI] [INFO]     🔗 [DFS/2] Переход по связанной ссылке: https://forum.majestic-rp.ru/threads/normativno-pravovyye-akty-ofisa-general-nogo-prokurora-shtata-san-andreas.3516327/post-11776561
+02:59:06 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-2] Быстрая загрузка темы с форума: «Связанная тема: post-11776561»...
 Exception in Tkinter callback
 Traceback (most recent call last):
   File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1968, in __call__
@@ -79,21 +254,20 @@ Traceback (most recent call last):
            ^^^^^^^^^^^^^^^^
   File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 862, in callit
     func(*args)
-  File "D:\Users\79528\PycharmProjects\PythonProject1\TestParser\ultiparser1.38.py", line 7851, in <lambda>
-    self.after(0, lambda: self._update_progress_ui(cur_d, cur_tot))
-                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: SelectiveParserWindow._update_progress_ui() missing 1 required positional argument: 'current_title'
-22:35:38 | INFO    | [OCR] [SUCCESS] url=https://cdn.docossum.com/documents/3I1lqLCV6jpFpt03VHkuDEW9dkhZZJS4.jpeg | chars=2361 | engine=EasyOCR | dur=24.00s
-22:35:54 | INFO    | [OCR] [SUCCESS] url=https://e.radikal.host/2026/11/23/imagef832ebf6a660e4d6.png | chars=1871 | engine=EasyOCR | dur=23.22s
-22:35:55 | INFO    | [OCR] [SUCCESS] url=https://allwebs.ru/images/2026/11/20/file-161beb1a12849fccb.jpg | chars=2170 | engine=EasyOCR | dur=21.03s
-22:36:04 | INFO    | [OCR] [SUCCESS] url=https://allwebs.ru/images/2026/11/20/file-20d868eab473d39a1.jpg | chars=814 | engine=EasyOCR | dur=7.75s
-22:36:05 | INFO    | [OCR] [SUCCESS] url=https://i.yapx.ru/eauRV.png | chars=2404 | engine=EasyOCR | dur=26.61s
-22:36:16 | INFO    | [OCR] [SUCCESS] url=https://e.radikal.host/2026/11/23/IZOBRAZENIE_2026-11-23_155719711.png | chars=2312 | engine=EasyOCR | dur=21.47s
-22:36:17 | INFO    | [OCR] [SUCCESS] url=https://allwebs.ru/images/2026/11/21/file-16f4bcc6857cd1cbf.jpg | chars=2055 | engine=EasyOCR | dur=12.38s
-22:36:19 | INFO    | [OCR] [SUCCESS] url=https://i.yapx.ru/eauRW.png | chars=2132 | engine=EasyOCR | dur=13.45s
-22:36:33 | INFO    | [OCR] [SUCCESS] url=https://allwebs.ru/images/2026/11/21/file-2494d18cfb6623468.jpg | chars=1390 | engine=EasyOCR | dur=15.52s
-22:36:39 | INFO    | [OCR] [SUCCESS] url=https://e.radikal.host/2026/11/23/IZOBRAZENIE_2026-11-23_155725115.png | chars=1882 | engine=EasyOCR | dur=22.47s
-22:36:39 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён .json: Исковое заявление №105.json
+  File "D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\ultiparser1.40.py", line 8450, in <lambda>
+    self.after(0, lambda d=cur_d, tot=cur_tot, t_name=title: self._update_progress_ui(d, tot, t_name))
+                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\ultiparser1.40.py", line 8578, in _update_progress_ui
+    self.progress["value"] = done
+    ~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1733, in __setitem__
+    self.configure({key: value})
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1722, in configure
+    return self._configure('configure', cnf, kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1712, in _configure
+    self.tk.call(_flatten((self._w, cmd)) + self._options(cnf))
+_tkinter.TclError: invalid command name ".!selectiveparserwindow.!frame4.!frame2.!progressbar"
 Exception in Tkinter callback
 Traceback (most recent call last):
   File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1968, in __call__
@@ -101,21 +275,23 @@ Traceback (most recent call last):
            ^^^^^^^^^^^^^^^^
   File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 862, in callit
     func(*args)
-  File "D:\Users\79528\PycharmProjects\PythonProject1\TestParser\ultiparser1.38.py", line 7851, in <lambda>
-    self.after(0, lambda: self._update_progress_ui(cur_d, cur_tot))
-                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: SelectiveParserWindow._update_progress_ui() missing 1 required positional argument: 'current_title'
-22:36:49 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/8c5eUVp.png | chars=2629 | engine=EasyOCR | dur=29.75s
-22:36:54 | INFO    | [OCR] [SUCCESS] url=https://allwebs.ru/images/2026/11/21/file-1062b01b3b2837e62.jpg | chars=1966 | engine=EasyOCR | dur=20.41s
-22:37:10 | INFO    | [OCR] [SUCCESS] url=https://allwebs.ru/images/2026/11/21/file-145cb15e43bb852af.jpg | chars=2369 | engine=EasyOCR | dur=16.30s
-22:37:13 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/Vi3qdmc.png | chars=2952 | engine=EasyOCR | dur=22.27s
-22:37:25 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/kmFuq0e.png | chars=985 | engine=EasyOCR | dur=12.05s
-22:37:25 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/LuR452A.png | chars=10 | engine=none | dur=0.00s
-22:37:31 | INFO    | [OCR] [SUCCESS] url=https://allwebs.ru/images/2026/11/21/file-2220e53cfa829d4af.jpg | chars=2928 | engine=EasyOCR | dur=20.78s
-22:37:35 | INFO    | [OCR] [SUCCESS] url=https://allwebs.ru/images/2026/11/21/file-3b895e54b4b5fd606.jpg | chars=909 | engine=EasyOCR | dur=3.52s
-22:37:35 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён .json: Исковое заявление №97.json
-22:37:35 | INFO    | [UI] [INFO]     🔗 [DFS/1] Переход по связанной ссылке: https://forum.majestic-rp.ru/threads/kabinet-spiker-senata.3364868/post-11768642
-22:37:35 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-1] Загрузка контента темы: «Связанная тема: post-11768642»...
+  File "D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\ultiparser1.40.py", line 8471, in <lambda>
+    self.after(0, lambda tot=new_tot: self.progress.configure(maximum=tot))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1722, in configure
+    return self._configure('configure', cnf, kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1712, in _configure
+    self.tk.call(_flatten((self._w, cmd)) + self._options(cnf))
+_tkinter.TclError: invalid command name ".!selectiveparserwindow.!frame4.!frame2.!progressbar"
+02:59:13 | WARNING | fast: серия блокировок (HTTP 403) — только браузер на 300с
+02:59:19 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/posts/11830954/
+02:59:22 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/posts/11830954/ | Длительность: 3.19с | Размер: 242 КБ | Валиден: True
+02:59:22 | INFO    | cookies обновлены из браузера — быстрый путь восстановлен
+02:59:22 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/posts/11830954/ | 242 КБ
+02:59:22 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №324\Исковое заявление №324.json
+02:59:22 | INFO    | [UI] [INFO]     🔗 [DFS/2] Переход по связанной ссылке: https://forum.majestic-rp.ru/posts/11831347/
+02:59:22 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-2] Быстрая загрузка темы с форума: «Связанная тема: 11831347»...
 Exception in Tkinter callback
 Traceback (most recent call last):
   File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1968, in __call__
@@ -123,23 +299,20 @@ Traceback (most recent call last):
            ^^^^^^^^^^^^^^^^
   File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 862, in callit
     func(*args)
-  File "D:\Users\79528\PycharmProjects\PythonProject1\TestParser\ultiparser1.38.py", line 7851, in <lambda>
-    self.after(0, lambda: self._update_progress_ui(cur_d, cur_tot))
-                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: SelectiveParserWindow._update_progress_ui() missing 1 required positional argument: 'current_title'
-22:37:42 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/4Y7D4hS.png | chars=2633 | engine=EasyOCR | dur=15.95s
-22:37:55 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/Jqvbwim.png | chars=2703 | engine=EasyOCR | dur=11.30s
-22:37:59 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/threads/kabinet-spiker-senata.3364868/post-11768642
-22:38:07 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/threads/kabinet-spiker-senata.3364868/post-11768642 | Длительность: 7.53с | Размер: 335 КБ | Валиден: True
-22:38:07 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/threads/kabinet-spiker-senata.3364868/post-11768642 | 335 КБ
-22:38:07 | INFO    | [UI] [INFO]     🖼 [Выборочный/DFS-1] OCR распознавание картинок в «Связанная тема: post-11768642»...
-22:38:12 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/CCMCVBF.png | chars=896 | engine=EasyOCR | dur=3.44s
-22:38:15 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/xwhLmbW.png | chars=2940 | engine=EasyOCR | dur=19.67s
-22:38:22 | INFO    | [OCR] [DOWNLOAD_FAILED] url=https://i.ibb.co/zVnGyqQv/1.png | chars=0 | engine=none | dur=10.22s
-22:38:22 | INFO    | [OCR] [CACHE_HIT] url=https://i.imgur.com/LuR452A.png | chars=10 | engine=none | dur=0.00s
-22:38:25 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/qBFLteA.png | chars=892 | engine=EasyOCR | dur=2.69s
-22:38:26 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/5EbpsBl.png | chars=1964 | engine=EasyOCR | dur=9.52s
-22:38:26 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён .json: Исковое заявление №99.json
+  File "D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\ultiparser1.40.py", line 8450, in <lambda>
+    self.after(0, lambda d=cur_d, tot=cur_tot, t_name=title: self._update_progress_ui(d, tot, t_name))
+                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\ultiparser1.40.py", line 8578, in _update_progress_ui
+    self.progress["value"] = done
+    ~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1733, in __setitem__
+    self.configure({key: value})
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1722, in configure
+    return self._configure('configure', cnf, kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1712, in _configure
+    self.tk.call(_flatten((self._w, cmd)) + self._options(cnf))
+_tkinter.TclError: invalid command name ".!selectiveparserwindow.!frame4.!frame2.!progressbar"
 Exception in Tkinter callback
 Traceback (most recent call last):
   File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1968, in __call__
@@ -147,17 +320,20 @@ Traceback (most recent call last):
            ^^^^^^^^^^^^^^^^
   File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 862, in callit
     func(*args)
-  File "D:\Users\79528\PycharmProjects\PythonProject1\TestParser\ultiparser1.38.py", line 7851, in <lambda>
-    self.after(0, lambda: self._update_progress_ui(cur_d, cur_tot))
-                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: SelectiveParserWindow._update_progress_ui() missing 1 required positional argument: 'current_title'
-22:38:32 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/32D0mMr.png | chars=1650 | engine=EasyOCR | dur=6.34s
-22:38:45 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/c544EYv.png | chars=2387 | engine=EasyOCR | dur=11.38s
-22:38:53 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/w6H8ENE.png | chars=2742 | engine=EasyOCR | dur=6.39s
-22:39:07 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/RzEUsa3.png | chars=1982 | engine=EasyOCR | dur=13.70s
-22:39:20 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/XHzcdtj.png | chars=1232 | engine=EasyOCR | dur=12.17s
-22:39:36 | INFO    | [OCR] [SUCCESS] url=https://i.imgur.com/EczwxIV.png | chars=1186 | engine=EasyOCR | dur=15.42s
-22:39:37 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён .json: Связанная тема post-11768642.json
+  File "D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\ultiparser1.40.py", line 8471, in <lambda>
+    self.after(0, lambda tot=new_tot: self.progress.configure(maximum=tot))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1722, in configure
+    return self._configure('configure', cnf, kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1712, in _configure
+    self.tk.call(_flatten((self._w, cmd)) + self._options(cnf))
+_tkinter.TclError: invalid command name ".!selectiveparserwindow.!frame4.!frame2.!progressbar"
+02:59:33 | INFO    | [BROWSER] [NAVIGATE] Запрос страницы через браузер: https://forum.majestic-rp.ru/posts/11766438/
+02:59:37 | INFO    | [BROWSER] [NAVIGATE_DONE] URL: https://forum.majestic-rp.ru/posts/11766438/ | Длительность: 4.11с | Размер: 260 КБ | Валиден: True
+02:59:37 | INFO    | cookies обновлены из браузера — быстрый путь восстановлен
+02:59:37 | INFO    | [HTTP] [BROWSER_OK] https://forum.majestic-rp.ru/posts/11766438/ | 260 КБ
+02:59:37 | INFO    | [UI] [OK]     💾 [Выборочный] Сохранён каркас .json: D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\forum.majestic-rp.ru\Результаты\Выборочный\Темы\Исковое заявление №105\Исковое заявление №97.json
 Exception in Tkinter callback
 Traceback (most recent call last):
   File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1968, in __call__
@@ -165,11 +341,20 @@ Traceback (most recent call last):
            ^^^^^^^^^^^^^^^^
   File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 862, in callit
     func(*args)
-  File "D:\Users\79528\PycharmProjects\PythonProject1\TestParser\ultiparser1.38.py", line 7851, in <lambda>
-    self.after(0, lambda: self._update_progress_ui(cur_d, cur_tot))
-                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: SelectiveParserWindow._update_progress_ui() missing 1 required positional argument: 'current_title'
-22:39:37 | INFO    | [UI] [INFO] ℹ [Выборочный] Создание .docx пропущено (режим: только .json)
+  File "D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\ultiparser1.40.py", line 8450, in <lambda>
+    self.after(0, lambda d=cur_d, tot=cur_tot, t_name=title: self._update_progress_ui(d, tot, t_name))
+                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\ultiparser1.40.py", line 8578, in _update_progress_ui
+    self.progress["value"] = done
+    ~~~~~~~~~~~~~^^^^^^^^^
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1733, in __setitem__
+    self.configure({key: value})
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1722, in configure
+    return self._configure('configure', cnf, kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1712, in _configure
+    self.tk.call(_flatten((self._w, cmd)) + self._options(cnf))
+_tkinter.TclError: invalid command name ".!selectiveparserwindow.!frame4.!frame2.!progressbar"
 Exception in Tkinter callback
 Traceback (most recent call last):
   File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1968, in __call__
@@ -177,18 +362,17 @@ Traceback (most recent call last):
            ^^^^^^^^^^^^^^^^
   File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 862, in callit
     func(*args)
-  File "D:\Users\79528\PycharmProjects\PythonProject1\TestParser\ultiparser1.38.py", line 7926, in <lambda>
-    self.after(0, lambda: self.v_status.set(f"Готово за {dt:.1f}с ({done_count[0]}/{total} тем)"))
-                                                                                    ^^^^^
-NameError: name 'total' is not defined
-Exception in Tkinter callback
-Traceback (most recent call last):
-  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1968, in __call__
-    return self.func(*args)
-           ^^^^^^^^^^^^^^^^
-  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 862, in callit
-    func(*args)
-  File "D:\Users\79528\PycharmProjects\PythonProject1\TestParser\ultiparser1.38.py", line 7934, in <lambda>
-    f"Спарсено тем: {done_count[0]} из {total}\n"
-                                        ^^^^^
-NameError: name 'total' is not defined
+  File "D:\Users\79528\PycharmProjects\PythonProject1\NewTestParser\ultiparser1.40.py", line 8471, in <lambda>
+    self.after(0, lambda tot=new_tot: self.progress.configure(maximum=tot))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1722, in configure
+    return self._configure('configure', cnf, kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Users\79528\AppData\Local\Programs\Python\Python312\Lib\tkinter\__init__.py", line 1712, in _configure
+    self.tk.call(_flatten((self._w, cmd)) + self._options(cnf))
+_tkinter.TclError: invalid command name ".!selectiveparserwindow.!frame4.!frame2.!progressbar"
+02:59:37 | INFO    | [UI] [INFO]     🔗 [DFS/1] Переход по связанной ссылке: https://forum.majestic-rp.ru/posts/11762184/
+02:59:37 | INFO    | [UI] [DEBUG]     📄 [Выборочный/DFS-1] Быстрая загрузка темы с форума: «Связанная тема: 11762184»...
+
+
+Удали файл после анализа
