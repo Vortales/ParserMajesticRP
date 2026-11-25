@@ -113,6 +113,8 @@ def image_block_code():
     parts.append("_last_ocr_engine = ''\n")
     parts.append(def_block("_detect_image_ext"))
     parts.append(def_block("_is_image_or_host_url"))
+    parts.append(def_block("_clean_extracted_url"))
+    parts.append(def_block("_resolve_image_host_direct_url"))
     parts.append(def_block("_ocr_log_event"))
     parts.append(ocr_gate_code())
     parts.append(def_block("_process_image_block"))

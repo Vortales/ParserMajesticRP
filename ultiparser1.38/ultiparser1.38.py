@@ -5210,6 +5210,53 @@ def _is_image_or_host_url(url: str) -> bool:
     return False
 
 
+def _clean_extracted_url(u: str) -> str:
+    """Очищает URL от случайных обрамляющих скобок, кавычек и пунктуации."""
+    if not u or not isinstance(u, str):
+        return ""
+    u = u.strip()
+    u = re.sub(r"^[<\"'\(\[\{]+", "", u)
+    u = re.sub(r"[\.,;:!?\>\"'\)\]\}]+$", "", u)
+    return u.strip()
+
+
+def _resolve_image_host_direct_url(url: str) -> str:
+    """
+    Преобразует страницы просмотра популярных фотохостингов в прямой URL изображения.
+    Например:
+      - ImageBan: https://imageban.ru/show/YYYY/MM/DD/hash/ext -> https://i1.imageban.ru/out/YYYY/MM/DD/hash.ext
+      - Imgur: https://imgur.com/a/ID или /gallery/ID или /ID -> https://i.imgur.com/ID.png
+    """
+    if not url or not isinstance(url, str):
+        return ""
+    url = _clean_extracted_url(url)
+    try:
+        p = urlparse(url)
+        host = (p.netloc or "").lower()
+        path = p.path or ""
+
+        # 1. ImageBan: https://imageban.ru/show/YYYY/MM/DD/<id>/<ext> или /show/YYYY/MM/DD/<id>.<ext>
+        if "imageban.ru" in host:
+            m = re.match(r"^/show/(\d{4})/(\d{2})/(\d{2})/([a-zA-Z0-9]+)(?:/|\.)([a-zA-Z0-9]+)$", path)
+            if m:
+                year, month, day, img_id, ext = m.groups()
+                return f"https://i1.imageban.ru/out/{year}/{month}/{day}/{img_id}.{ext}"
+
+        # 2. Imgur: https://imgur.com/a/<id> или /gallery/<id> или /<id>
+        if "imgur.com" in host and not host.startswith("i."):
+            m = re.match(r"^/(?:a|gallery)/([a-zA-Z0-9]+)", path)
+            if m:
+                img_id = m.group(1)
+                return f"https://i.imgur.com/{img_id}.png"
+            m = re.match(r"^/([a-zA-Z0-9]{5,8})$", path)
+            if m:
+                img_id = m.group(1)
+                return f"https://i.imgur.com/{img_id}.png"
+    except Exception:
+        pass
+    return url
+
+
 def _ocr_worth_running(data: bytes) -> bool:
     """Стоит ли гнать движок OCR: отсекает иконки/пустышки/разделители (v1.17/v1.37)."""
     if not data or len(data) < OCR_MIN_BYTES:
@@ -5265,7 +5312,7 @@ def _process_image_block(block: dict, ctx: dict) -> list:
     if ctx.get("count", 0) >= OCR_MAX_IMAGES_PER_POST:
         return []
     ctx["count"] = ctx.get("count", 0) + 1
-    url = src.split("#")[0]
+    url = _resolve_image_host_direct_url(src.split("#")[0])
     if url.startswith("//"):
         url = "https:" + url
     em = ctx.get("emitter")
@@ -5523,7 +5570,7 @@ def _process_blocks_with_images(blocks: list, ctx: dict) -> list:
             if "http://" in text or "https://" in text:
                 found_urls = re.findall(r"https?://[^\s<>\"\x27\(\)]+", text)
                 for u in found_urls:
-                    clean_u = u.rstrip(".,;:!?)")
+                    clean_u = _clean_extracted_url(u)
                     if clean_u and clean_u not in _seen_urls and _is_image_or_host_url(clean_u):
                         _seen_urls.add(clean_u)
                         synth_img = {"type": "image", "src": clean_u, "alt": ""}
@@ -5535,7 +5582,7 @@ def _process_blocks_with_images(blocks: list, ctx: dict) -> list:
             if isinstance(b.get("links"), list):
                 all_block_links.extend(b.get("links"))
             for link_u in all_block_links:
-                link_u = (link_u or "").strip()
+                link_u = _clean_extracted_url(link_u)
                 if link_u and link_u not in _seen_urls and _is_image_or_host_url(link_u):
                     _seen_urls.add(link_u)
                     synth_img = {"type": "image", "src": link_u, "alt": ""}
@@ -7851,7 +7898,7 @@ class SelectiveParserWindow(tk.Toplevel):
                     if isinstance(b.get("links"), list):
                         all_links.extend(b.get("links"))
                     for lu in all_links:
-                        lu = (lu or "").strip()
+                        lu = _clean_extracted_url(lu)
                         if lu:
                             _check_and_add(lu)
 
@@ -7861,18 +7908,18 @@ class SelectiveParserWindow(tk.Toplevel):
                         # Извлекаем ссылки из формата сносок: текст [сноска: URL]
                         footnotes = re.findall(r"\[сноска:\s*([^\]\s]+)\]", txt)
                         for fn in footnotes:
-                            _check_and_add(fn)
+                            _check_and_add(_clean_extracted_url(fn))
 
                         # Извлекаем открытые http/https ссылки
                         if "/threads/" in txt:
                             urls = re.findall(r"https?://[^\s<>\"\'\(\)\[\]]+", txt)
                             for u in urls:
-                                _check_and_add(u.rstrip(".,;:!?)"))
+                                _check_and_add(_clean_extracted_url(u))
 
                             # Относительные ссылки /threads/... в тексте
                             rel_urls = re.findall(r"(?:^|[\s\"\'\(])(/threads/[^\s<>\"\'\(\)\[\]]+)", txt)
                             for ru in rel_urls:
-                                _check_and_add(ru.rstrip(".,;:!?)"))
+                                _check_and_add(_clean_extracted_url(ru))
 
                     # 3. Рекурсивный обход вложенных блоков (спойлеры, цитаты, контейнеры)
                     if isinstance(b.get("blocks"), list):

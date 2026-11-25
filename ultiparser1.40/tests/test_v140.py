@@ -67,12 +67,49 @@ class TestV140(unittest.TestCase):
         self.assertTrue(dl1.endswith("/export?format=docx"))
         self.assertEqual(fn1, "Апелляционная жалоба.docx")
 
-    def test_dedup_cache(self):
-        cache = {}
-        url = "https://example.com/image.png"
-        cache[url] = [{"type": "paragraph", "text": "Распознанный текст из кэша"}]
-        self.assertIn(url, cache)
-        self.assertEqual(cache[url][0]["text"], "Распознанный текст из кэша")
+    def test_clean_and_resolve_image_urls(self):
+        src_path = Path(__file__).resolve().parent.parent / "ultiparser1.40.py"
+        src_code = src_path.read_text(encoding="utf-8")
+        lines = src_code.split("\n")
+
+        def get_def(name):
+            start = -1
+            for i, l in enumerate(lines):
+                if l.startswith(f"def {name}(") or l.startswith(f"def {name} :"):
+                    start = i
+                    break
+            if start == -1:
+                return ""
+            res = [lines[start]]
+            for l in lines[start+1:]:
+                if l.startswith("def ") or (l and not l.startswith(" ") and not l.startswith("\t") and not l.startswith("#")):
+                    break
+                res.append(l)
+            return "\n".join(res)
+
+        mod = {"urlparse": urlparse, "re": re}
+        for func_name in ("_clean_extracted_url", "_resolve_image_host_direct_url", "_is_image_or_host_url"):
+            code = get_def(func_name)
+            self.assertTrue(len(code) > 0, f"Function {func_name} not found")
+            exec(code, mod)
+
+        clean_url = mod["_clean_extracted_url"]
+        resolve_url = mod["_resolve_image_host_direct_url"]
+        is_img = mod["_is_image_or_host_url"]
+
+        raw_ib = "https://imageban.ru/show/2026/11/07/28374259c29252327f66496fcf937c7a/png]"
+        self.assertEqual(clean_url(raw_ib), "https://imageban.ru/show/2026/11/07/28374259c29252327f66496fcf937c7a/png")
+        self.assertEqual(
+            resolve_url(raw_ib),
+            "https://i1.imageban.ru/out/2026/11/07/28374259c29252327f66496fcf937c7a.png"
+        )
+        self.assertTrue(is_img(resolve_url(raw_ib)))
+
+        raw_imgur = "https://imgur.com/a/nWXaVXN]"
+        self.assertEqual(clean_url(raw_imgur), "https://imgur.com/a/nWXaVXN")
+        self.assertEqual(resolve_url(raw_imgur), "https://i.imgur.com/nWXaVXN.png")
+        self.assertTrue(is_img(resolve_url(raw_imgur)))
 
 if __name__ == "__main__":
     unittest.main()
+
